@@ -83,7 +83,7 @@ def add_cross_section(feat: pl.DataFrame) -> pl.DataFrame:
 
 def add_time_of_day(feat: pl.DataFrame) -> pl.DataFrame:
     if "minutes_from_open" not in feat.columns and "time_et" in feat.columns:
-        feat = feat.with_columns((pl.col("time_et").dt.hour() * 60 + pl.col("time_et").dt.minute() - (9 * 60 + 30)).alias("minutes_from_open"))
+        feat = feat.with_columns((pl.col("time_et").dt.hour().cast(pl.Int32) * 60 + pl.col("time_et").dt.minute().cast(pl.Int32) - (9 * 60 + 30)).alias("minutes_from_open"))
     if "same_clock_mean_return" not in feat.columns and "ret_5m" in feat.columns:
         feat = feat.with_columns(pl.lit(None).cast(pl.Float64).alias("same_clock_mean_return"))
         feat = feat.with_columns((pl.col("ret_5m") - pl.col("same_clock_mean_return").fill_null(0)).alias("same_clock_surprise"))

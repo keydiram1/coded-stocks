@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +11,7 @@ import yaml
 from quant_edge_lab.data.massive.news import CANONICAL_UTC, with_utc_us
 from quant_edge_lab.discovery.campaign_v4 import freeze_campaign, load_v4, run_pipeline_on_frame, synthetic_panel, write_freeze_report
 from quant_edge_lab.discovery.conditional import Condition, apply_conditions, canonical_spec, make_candidate
-from quant_edge_lab.features.v4 import assert_available_le_decision, ensure_utc
+from quant_edge_lab.features.v4 import assert_available_le_decision, ensure_utc, on_decision_grid
 from quant_edge_lab.features.v4.residuals import loo_market_returns
 from quant_edge_lab.peers import PeerGraphBuilder
 
@@ -70,6 +70,13 @@ def test_candidate_identity_canonical():
     c2 = make_candidate([Condition("leader_response_gap", ">", 0.01), Condition("H004", "==", True)], "LONG", "future_residual_15m", 15, "t", "D1")
     assert c1.candidate_id == c2.candidate_id
     assert canonical_spec(c1.conditions, "LONG", "future_residual_15m")["conditions"][0][0] == "H004"
+
+
+def test_decision_grid_casts_time_minutes_to_int32():
+    df = pl.DataFrame({"time_et": [time(9, 30), time(9, 40), time(9, 41), time(15, 30), time(15, 31)]})
+    g = on_decision_grid(df)
+    assert g.height == 2
+    assert g["time_et"].to_list() == [time(9, 40), time(15, 30)]
 
 
 def test_utc_instant_preserved():

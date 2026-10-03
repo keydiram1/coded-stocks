@@ -349,7 +349,7 @@ def run_matrix_days(
     for day in t_write:
         assert_day_in_unsealed(day, man)
         ck = (state.get("days") or {}).get(day) or {}
-        if ck.get("status") == "ok" and ck.get("cfg_hash") == cfg_hash and v4_day_path(root, day).exists():
+        if ck.get("status") == "ok" and ck.get("cfg_hash") == cfg_hash and v4_day_path(root, day).exists() and int(ck.get("rows") or 0) > 0:
             done += 1
             rows_total = max(rows_total, int(state.get("matrix_rows") or 0))
             if done <= 25 or done % 5 == 0:
@@ -376,6 +376,8 @@ def run_matrix_days(
                 hist_ok_through = day
             clock_mean = {k: clock_sum[k] / clock_n[k] for k in clock_n if clock_n[k]}
             feat = build_day_matrix(root, day, clock_mean=clock_mean)
+            if feat.height == 0 and causal_p.exists():
+                raise CampaignStop(f"empty V4 matrix despite causal_v2 present for {day}")
             wd.note_partition(feat, expected_nonempty=True)
             if "minutes_from_open" in feat.columns and "ret_5m" in feat.columns:
                 g = feat.group_by("minutes_from_open").agg(pl.col("ret_5m").mean().alias("m"))

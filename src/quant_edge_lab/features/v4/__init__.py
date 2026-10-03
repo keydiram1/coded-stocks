@@ -27,7 +27,7 @@ def assert_join_keys_utc(left: pl.DataFrame, right: pl.DataFrame, a: str, b: str
 def on_decision_grid(df: pl.DataFrame) -> pl.DataFrame:
     if "time_et" not in df.columns:
         raise ValueError("time_et required")
-    mins = pl.col("time_et").dt.hour() * 60 + pl.col("time_et").dt.minute()
+    mins = pl.col("time_et").dt.hour().cast(pl.Int32) * 60 + pl.col("time_et").dt.minute().cast(pl.Int32)
     start = 9 * 60 + 40
     end = 15 * 60 + 30
     return df.filter((mins >= start) & (mins <= end) & ((mins - start) % GRID_STEP_MIN == 0))
