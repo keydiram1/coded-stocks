@@ -351,16 +351,17 @@ def run_matrix_days(
     for day in t_write:
         assert_day_in_unsealed(day, man)
         ck = (state.get("days") or {}).get(day) or {}
-        if ck.get("status") == "ok" and ck.get("cfg_hash") == cfg_hash and v4_day_path(root, day).exists() and int(ck.get("rows") or 0) > 0:
-            done += 1
-            rows_total = max(rows_total, int(state.get("matrix_rows") or 0))
-            if done <= 25 or done % 5 == 0:
-                _progress("STAGE 1 MATRIX", done, len(t_write), t0, rows_total, wd)
-            continue
+        if ck.get("cfg_hash") == cfg_hash and ck.get("status") in {"ok", "ok_warmup"}:
+            if ck.get("status") == "ok_warmup" or (v4_day_path(root, day).exists() and int(ck.get("rows") or 0) > 0):
+                done += 1
+                if done <= 25 or done % 5 == 0:
+                    _progress("STAGE 1 MATRIX", done, len(t_write), t0, rows_total, wd)
+                continue
         try:
             causal_p = day_path(root, day)
             idx_all = days_all.index(day)
             prev = days_all[idx_all - 1] if idx_all else ""
+            warmup = day < man["splits"]["D1"]["start"]
             if not causal_p.exists():
                 if hist_ok_through != prev:
                     hist = rebuild_hist(root, days_all, day)
@@ -376,11 +377,17 @@ def run_matrix_days(
                     feat_c.write_parquet(causal_p)
                 _ingest_hist(sessioned, hist)
                 hist_ok_through = day
+            if (not causal_p.exists()) or (causal_p.exists() and pl.scan_parquet(causal_p).select(pl.len()).collect().item() == 0):
+                if warmup:
+                    state.setdefault("days", {})[day] = {"status": "ok_warmup", "cfg_hash": cfg_hash, "rows": 0, "health": {"rows": 0, "note": "warmup_no_prev_close"}}
+                    done += 1
+                    continue
+                raise CampaignStop(f"empty causal_v2 for non-warmup day {day}")
             clock_mean = {k: clock_sum[k] / clock_n[k] for k in clock_n if clock_n[k]}
             feat = build_day_matrix(root, day, clock_mean=clock_mean)
-            if feat.height == 0 and causal_p.exists():
+            if feat.height == 0 and not warmup:
                 raise CampaignStop(f"empty V4 matrix despite causal_v2 present for {day}")
-            wd.note_partition(feat, expected_nonempty=True)
+            wd.note_partition(feat, expected_nonempty=not warmup)
             if "minutes_from_open" in feat.columns and "ret_5m" in feat.columns:
                 g = feat.group_by("minutes_from_open").agg(pl.col("ret_5m").mean().alias("m"))
                 for row in g.iter_rows(named=True):
