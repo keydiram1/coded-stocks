@@ -1,0 +1,21 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-fast",
+  "family_id": "H037",
+  "variant_id": "H037.v1",
+  "stage": "fast",
+  "decision": "KILL",
+  "reason": "sign disagrees with expected_direction=short mean_15m=0.001262020271457123",
+  "events": 69078,
+  "ticker_days": 69078,
+  "means": {
+    "1m": -0.0004370938796157263,
+    "15m": 0.001262020271457123,
+    "5m": -0.00042608199132534877,
+    "30m": -6.995708651340764e-05,
+    "60m": 9.399127876669716e-05
+  },
+  "unsigned_metric": false,
+  "note": "INTERIM until full discovery; SIGNAL_ONLY; not an edge",
+  "recorded_at": "2026-10-02T12:56:42.315604+00:00"
+}

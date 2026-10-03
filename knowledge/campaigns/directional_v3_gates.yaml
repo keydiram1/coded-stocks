@@ -1,0 +1,73 @@
+# FROZEN 2026-10-03 BEFORE directional campaign v3 market evaluation.
+# Horizon floors: 15m 12bp; 30/60/120m = 12bp * sqrt(h/15). Do not edit after launch.
+
+version: dir_gates_v3
+primary_horizon: 15m
+returns_are_signed_to_decision: true
+economic_floors:
+  "15m": 0.0012
+  "30m": 0.0017
+  "60m": 0.0024
+  "120m": 0.0034
+outlier_floors:
+  "15m": 0.0008
+  "30m": 0.0011
+  "60m": 0.0016
+  "120m": 0.0023
+news_lags_min: [60, 90, 120]
+primary_news_lag_min: 60
+sector_pit: false
+
+stages:
+  fast:
+    min_ticker_days: 25
+    min_trading_days: 8
+    min_abs_mean_15m: 0.0012
+    min_win_rate: null
+    min_frac_days_agree: null
+    min_median_same_sign: false
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.20
+    kill_if_sign_disagrees: true
+    require_outlier_robust: false
+  falsify:
+    min_ticker_days: 40
+    min_trading_days: 12
+    min_abs_mean_15m: 0.0012
+    min_win_rate: 0.48
+    min_frac_days_agree: 0.45
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.20
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0008
+  broad:
+    min_ticker_days: 80
+    min_trading_days: 25
+    min_abs_mean_15m: 0.0015
+    min_win_rate: 0.50
+    min_frac_days_agree: 0.48
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.18
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0008
+  full:
+    min_ticker_days: 200
+    min_trading_days: 80
+    min_abs_mean_15m: 0.0018
+    min_win_rate: 0.51
+    min_frac_days_agree: 0.50
+    min_median_same_sign: true
+    require_ci_excludes_zero: true
+    max_top_ticker_share: 0.15
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0010
+
+note: >
+  Stage min_abs_mean_15m is the 15m floor; runner substitutes economic_floors[horizon]
+  for jobs whose declared primary horizon is not 15m. Outlier_floor similarly scaled
+  via outlier_floors[horizon] at falsify+. SIGNAL_ONLY. No sealed OOS.

@@ -1,0 +1,2037 @@
+{
+  "version": "families_v1",
+  "count": 41,
+  "families": [
+    {
+      "id": "H000",
+      "title": "Unconditional long gap+RVOL continuation (Experiment #1)",
+      "executable": false,
+      "idea_only_reason": "Frozen completed experiment; do not rerun as discovery.",
+      "mechanism": "Chasing \u226515% RTH open gap with extreme early RVOL as continuation.",
+      "rationale": "Original full-panel experiment.",
+      "expected_direction": "long",
+      "event_policy": "all_clustered",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": "hypotheses/gap_rvol_continuation_v1.yaml",
+      "engine": "frozen",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum"
+        ],
+        "context": [
+          "open",
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": "exp-gap_rvol_continuation_v1-20261002075236",
+      "known_weaknesses": []
+    },
+    {
+      "id": "H001",
+      "title": "Extreme gap fade",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Large gap-up + abnormal early volume mean-reverts; first event per ticker-day only.",
+      "rationale": "Experiment #1 long continuation failed monotonically through 60m.",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": "hypotheses/discovery/H001_gap_fade.yaml",
+      "engine": "yaml_conditions",
+      "parameter_neighborhood": [
+        {
+          "gap_pct": 0.15,
+          "rvol_5m": 5.0
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal"
+        ],
+        "context": [
+          "open",
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "derived_from_result"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "does not search when reversal starts; window is still 09:35-10:30"
+      ],
+      "parent_family_id": "H000",
+      "derived_from_experiment": "exp-gap_rvol_continuation_v1-20261002075236",
+      "known_weaknesses": []
+    },
+    {
+      "id": "H002",
+      "title": "Gap hold-near-high then continuation",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Gap-up that retains the first-15m high then breaks that high continues (long).",
+      "rationale": "Opening-strength retention, not merely staying above the 09:30 open.",
+      "expected_direction": "long",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "near_high": 0.003,
+          "min_window_range": 0.002
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum",
+          "inventory"
+        ],
+        "context": [
+          "open",
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "derived_from_result"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "near-high is 0.3% of window high; not VWAP"
+      ],
+      "parent_family_id": "H000",
+      "derived_from_experiment": "exp-gap_rvol_continuation_v1-20261002075236",
+      "known_weaknesses": []
+    },
+    {
+      "id": "H003",
+      "title": "Parabolic intraday exhaustion",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Front-loaded 15m advance with expanding volume fades (short).",
+      "rationale": "",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "ret_15m": 0.15,
+          "ret_5m": 0.08
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal",
+          "volatility"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H004",
+      "title": "Volume shock before price shock",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Abnormal 5m volume while price is still quiet precedes a large unsigned move.",
+      "rationale": "Primary S1 metric is mean |15m|, not a chosen side.",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "rvol_5m": 5.0,
+          "abs_ret_5m_max": 0.012
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": false,
+        "min_abs_mean_to_kill_as_too_small": 0.008,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information",
+          "liquidity"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "unsigned metric is not a tradable side"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H005",
+      "title": "Price shock without confirming volume",
+      "executable": false,
+      "idea_only_reason": "Needs volume-relative-to-typical threshold pair.",
+      "mechanism": "Large move on weak volume mean-reverts.",
+      "rationale": "",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal",
+          "liquidity"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H006",
+      "title": "Opening-range breakout",
+      "executable": false,
+      "idea_only_reason": "Range length and volume-expansion rule unspecified.",
+      "mechanism": "Break of first 5/15/30m range with volume expansion continues.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum"
+        ],
+        "context": [
+          "open",
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H007",
+      "title": "Failed breakout / trap",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Break of yesterday RTH high reversed within 15m is a trap (short).",
+      "rationale": "",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "level": "yday_high",
+          "max_trap_minutes": 15
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal",
+          "structural"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H008",
+      "title": "VWAP displacement / reversion",
+      "executable": false,
+      "idea_only_reason": "Bar-VWAP proxy and displacement units unspecified.",
+      "mechanism": "Distance from intraday volume-weighted reference reverts.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "bar VWAP is not exchange trade VWAP"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H009",
+      "title": "VWAP reclaim / rejection",
+      "executable": false,
+      "idea_only_reason": "Time-below and reclaim volume rules unspecified.",
+      "mechanism": "Cross of VWAP with abnormal volume continues.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H010",
+      "title": "Premarket move \u2192 RTH behavior",
+      "executable": false,
+      "idea_only_reason": "Must separate PM return, gap, and RTH response with explicit clocks.",
+      "mechanism": "Large premarket winner/loser has systematic RTH response.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information"
+        ],
+        "context": [
+          "premarket",
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H011",
+      "title": "Premarket high/low break",
+      "executable": false,
+      "idea_only_reason": "Failed-attempt vs first-clean-break counting rule unspecified.",
+      "mechanism": "RTH cross of premarket high/low is informative.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum",
+          "structural"
+        ],
+        "context": [
+          "premarket",
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H012",
+      "title": "Opening reversal",
+      "executable": false,
+      "idea_only_reason": "Giveback fraction and window unspecified.",
+      "mechanism": "Strong first 5\u201315m then giveback continues to reverse.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal"
+        ],
+        "context": [
+          "open",
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H013",
+      "title": "Intraday momentum after consolidation",
+      "executable": false,
+      "idea_only_reason": "Consolidation range/volume and breakout clock unspecified.",
+      "mechanism": "Impulse \u2192 tight pause \u2192 breakout continues.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H014",
+      "title": "Volatility compression then expansion",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Compression vs own 20d daily range then expansion-bar direction persists.",
+      "rationale": "",
+      "expected_direction": "long",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "compress_frac": 0.35,
+          "expand_mult": 1.5
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "volatility"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "signed in expansion-bar direction"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H015",
+      "title": "Volatility explosion \u2192 reversion",
+      "executable": false,
+      "idea_only_reason": "Explosion vs that name's baseline unspecified.",
+      "mechanism": "Sudden huge range then normalizes.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "volatility",
+          "reversal"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H016",
+      "title": "Relative-strength dislocation",
+      "executable": false,
+      "idea_only_reason": "Needs a preregistered market residual proxy.",
+      "mechanism": "Idiosyncratic extreme vs quiet tape continues or reverts.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "cross-sectional"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H017",
+      "title": "Repeated intraday high/low attacks",
+      "executable": false,
+      "idea_only_reason": "Attempt count and 'same level' tolerance unspecified.",
+      "mechanism": "Multiple touches change breakout vs exhaustion odds.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H018",
+      "title": "Abnormal dollar-volume regime transition",
+      "executable": false,
+      "idea_only_reason": "Quiet-to-hot threshold and post-change window unspecified.",
+      "mechanism": "After liquidity regime changes, subsequent price path is structured.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "liquidity"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H019",
+      "title": "Large down-gap capitulation/rebound",
+      "executable": false,
+      "idea_only_reason": "Down-gap and volume thresholds not frozen.",
+      "mechanism": "Huge gap-down + volume may rebound (not assumed symmetric to H001).",
+      "rationale": "",
+      "expected_direction": "long",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal"
+        ],
+        "context": [
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H020",
+      "title": "Intraday crash rebound",
+      "executable": false,
+      "idea_only_reason": "Crash window and volume extreme unspecified.",
+      "mechanism": "Very rapid decline + volume then short-horizon bounce.",
+      "rationale": "",
+      "expected_direction": "long",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "reversal",
+          "liquidity"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H021",
+      "title": "Gap aligned with vs against yesterday RTH",
+      "executable": false,
+      "idea_only_reason": "Yesterday RTH return cutoff unspecified.",
+      "mechanism": "Gap-with-trend vs gap-against-trend are different inventories.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "multi-day"
+        ],
+        "mechanism": [
+          "inventory",
+          "momentum"
+        ],
+        "context": [
+          "open",
+          "multi-session"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H022",
+      "title": "Same-morning gap crowding",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "H001 fade when N_gap10 at 09:31 is already >= 80 (crowded auction).",
+      "rationale": "Crowding frozen at 09:31 from 09:30 opens only.",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": "hypotheses/discovery/H001_gap_fade.yaml",
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "N_gap10": 80
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "cross-sectional"
+        ],
+        "context": [
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H023",
+      "title": "First RTH after known split",
+      "executable": false,
+      "idea_only_reason": "Control/data-quality family; economic hypothesis not stated as trade direction.",
+      "mechanism": "Mechanical as-printed discontinuity vs economic gap.",
+      "rationale": "Control.",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV",
+          "corporate_actions"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "control family, not a trading candidate"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H024",
+      "title": "Halt/resume proxy from missing minutes",
+      "executable": false,
+      "idea_only_reason": "Missing minutes are a PROXY not an exchange halt.",
+      "mechanism": "Silent interval then large first print.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information",
+          "structural"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "not proof of a halt"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H025",
+      "title": "Dormant-tape reactivation",
+      "executable": false,
+      "idea_only_reason": "Sparse-minute threshold unspecified.",
+      "mechanism": "Attention arrives after a dead tape.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information",
+          "liquidity"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H026",
+      "title": "Multi-day runner then first failed RTH",
+      "executable": false,
+      "idea_only_reason": "N-session rule unspecified.",
+      "mechanism": "Swing positioning exhausts on first failed RTH.",
+      "rationale": "",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "multi-day"
+        ],
+        "mechanism": [
+          "reversal",
+          "momentum"
+        ],
+        "context": [
+          "open",
+          "multi-session"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H027",
+      "title": "Yesterday last-30m vs overnight gap",
+      "executable": false,
+      "idea_only_reason": "Last-30m cutoff unspecified.",
+      "mechanism": "Close-auction leftover vs new overnight information.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "multi-day"
+        ],
+        "mechanism": [
+          "inventory",
+          "information"
+        ],
+        "context": [
+          "close",
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H028",
+      "title": "After-hours \u2192 next RTH",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Large D-1 AH move continues into D RTH; entry is D 09:30 open. No D premarket.",
+      "rationale": "PRIMARY is AH continuation; fade is variant H028.v1.",
+      "expected_direction": "long",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "ah_abs_ret": 0.05,
+          "role": "continuation"
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information"
+        ],
+        "context": [
+          "after-hours",
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H029",
+      "title": "Morning extreme \u2192 late-day unwind",
+      "executable": false,
+      "idea_only_reason": "10:30 extreme and 15:30\u201316:00 window need frozen cuts.",
+      "mechanism": "Day-trader flatten / MOC of morning extremes.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "inventory"
+        ],
+        "context": [
+          "morning",
+          "close"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H030",
+      "title": "Round-number stall/break",
+      "executable": false,
+      "idea_only_reason": "Levels must be the preregistered set {1,2,5,10,20} only; neighborhood not frozen.",
+      "mechanism": "Clustering at human price levels.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "do not mine arbitrary round numbers"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H031",
+      "title": "10:30 trend-day state \u2192 rest of day",
+      "executable": false,
+      "idea_only_reason": "Must use 10:30 price location in 09:30\u201310:30 range, not the 09:30 print classified after the fact.",
+      "mechanism": "One-way inventory day persists after 10:30.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "inventory",
+          "momentum"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H032",
+      "title": "Still-unfilled gap at later clock",
+      "executable": false,
+      "idea_only_reason": "Clock (11:00 vs 14:00) and unfilled threshold unspecified.",
+      "mechanism": "Unfilled overnight gap later in the day is leftover support/resistance.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "midday",
+          "afternoon"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H033",
+      "title": "First extreme of afternoon",
+      "executable": false,
+      "idea_only_reason": "Afternoon clock and first-hit % unspecified.",
+      "mechanism": "Afternoon first extreme is news-like, not the open auction.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "information"
+        ],
+        "context": [
+          "afternoon"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H034",
+      "title": "High-turnover low-net-displacement two-sided state",
+      "executable": false,
+      "idea_only_reason": "Must not claim true absorption from OHLCV.",
+      "mechanism": "High volume, little net change, both wicks; then directional resolution.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "liquidity"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "OHLCV cannot prove order-book absorption"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H035",
+      "title": "Consecutive-close streak",
+      "executable": false,
+      "idea_only_reason": "Needs explicit reset after an event to avoid streak-event inflation.",
+      "mechanism": "N consecutive closes persist or exhaust.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "momentum"
+        ],
+        "context": [
+          "morning",
+          "midday"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI",
+        "must reset after event"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H036",
+      "title": "Impulse-bar close location",
+      "executable": false,
+      "idea_only_reason": "Shock-bar % and close location bins unspecified.",
+      "mechanism": "Close vs high/low of the impulse bar (effort vs result).",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H037",
+      "title": "First tag of yesterday high/low",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "First RTH tag of yesterday RTH high is leftover resistance (short).",
+      "rationale": "Downside tag is variant H037.v1, not pooled.",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "batch10",
+      "parameter_neighborhood": [
+        {
+          "level": "yday_high",
+          "tolerance": 0.0
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "multi-day"
+        ],
+        "mechanism": [
+          "structural"
+        ],
+        "context": [
+          "morning",
+          "multi-session"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H038",
+      "title": "Air pocket in historically illiquid names",
+      "executable": false,
+      "idea_only_reason": "Prior dvol decile and shock size unspecified.",
+      "mechanism": "No two-sided market after a % shock in a historically dead name.",
+      "rationale": "",
+      "expected_direction": "either",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "liquidity"
+        ],
+        "context": [
+          "morning"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H039",
+      "title": "Tape-wide one-way open \u2192 cheap-name overshoot",
+      "executable": false,
+      "idea_only_reason": "Cross-sectional median proxy and residual cut unspecified.",
+      "mechanism": "High-beta overshoot when the tape is already one-way.",
+      "rationale": "",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": null,
+      "engine": "unimplemented",
+      "parameter_neighborhood": [],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 25,
+        "min_trading_days": 8,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "cross-sectional"
+        ],
+        "context": [
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    },
+    {
+      "id": "H040",
+      "title": "Weekend/Monday gap vs midweek gap",
+      "executable": true,
+      "idea_only_reason": null,
+      "mechanism": "Monday gap-up of sufficient size fades more than midweek (weekend information/risk).",
+      "rationale": "Calendar/information, not the same as a Tuesday 15% gap.",
+      "expected_direction": "short",
+      "event_policy": "first_ticker_day",
+      "cooldown_minutes": null,
+      "max_events_per_ticker_day": 1,
+      "hypothesis_yaml": "hypotheses/discovery/H040_monday_gap.yaml",
+      "engine": "yaml_conditions_monday",
+      "parameter_neighborhood": [
+        {
+          "gap_pct": 0.08,
+          "weekday": "Monday"
+        }
+      ],
+      "stage_criteria": {
+        "version": "stage_criteria_v1",
+        "min_ticker_days": 15,
+        "min_trading_days": 4,
+        "kill_if_sign_disagrees": true,
+        "min_abs_mean_to_kill_as_too_small": null,
+        "max_top_ticker_share": 0.5,
+        "primary_horizon": "15m"
+      },
+      "taxonomy": {
+        "time_scale": [
+          "intraday"
+        ],
+        "mechanism": [
+          "calendar",
+          "information"
+        ],
+        "context": [
+          "open"
+        ],
+        "data_dependencies": [
+          "OHLCV"
+        ],
+        "origin": "independent"
+      },
+      "limitations": [
+        "SIGNAL_ONLY; no NBBO",
+        "as-printed prices",
+        "ticker identity not FIGI"
+      ],
+      "parent_family_id": null,
+      "derived_from_experiment": null,
+      "known_weaknesses": []
+    }
+  ]
+}

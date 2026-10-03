@@ -1,0 +1,29 @@
+{
+  "report": "C:\\Users\\IVS\\quant-edge-lab\\reports\\discovery\\v4_freeze.md",
+  "freeze": {
+    "manifest": "ee59be114e76f3ecd78bd3ad2590e60c94f0754a42096818d9fbf7ee8a7b4a3e",
+    "gates": "02ada62546ec70681c7d884f4cb820923e6d1417e21a6d31586fc8c955b8ac38",
+    "git": "UNCOMMITTED"
+  },
+  "splits": {
+    "method": "chronological_unsealed",
+    "warmup_last_day": "2021-10-28",
+    "D1": {
+      "start": "2021-10-29",
+      "end": "2023-10-17",
+      "n_days": 494
+    },
+    "D2": {
+      "start": "2023-10-18",
+      "end": "2024-10-10",
+      "n_days": 247
+    },
+    "D3": {
+      "start": "2024-10-11",
+      "end": "2026-10-01",
+      "n_days": 494
+    }
+  },
+  "split_index_check": "ok",
+  "status": "SIGNAL_ONLY"
+}

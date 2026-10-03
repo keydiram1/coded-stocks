@@ -1,0 +1,136 @@
+# DIRECTIONAL DISCOVERY CAMPAIGN V2 — FROZEN BEFORE MARKET EVALUATION
+# Do not add hypotheses or retune thresholds after seeing results.
+
+campaign_id: directional_campaign_v2
+version: v2
+frozen_at: "2026-10-02T00:00:00Z"
+gates: knowledge/campaigns/directional_v2_gates.yaml
+feature_store: causal_v2
+entry: next_bar_open
+decision: confirmation_or_snapshot_bar_close_plus_1m
+horizons: [1m, 5m, 15m, 30m, 60m]
+event_policy: first_ticker_day
+train_frac_panel: 0.60
+model_seed: 42
+k3:
+  n_estimators: 40
+  max_depth: 3
+  learning_rate: 0.1
+k1_l2: 1.0
+k2_ridge: 1.0
+snapshots_et: ["10:00", "11:00", "12:00", "13:00", "14:00"]
+
+thresholds:
+  A_impulse_ret: 0.04
+  A_impulse_ret_strict: 0.06
+  A_rvol_10: 3.0
+  A_pullback_lo: 0.15
+  A_pullback_hi: 0.50
+  A_observe_m: 15
+  B_observe_m: 10
+  B_reject_pct: 0.005
+  B_accept_closes: 3
+  C_tail: 0.05
+  C_persist_band: 0.10
+  C_decay_out: 0.15
+  D_mkt_stress: -0.003
+  D_breadth_stress: 0.40
+  D_flat: 0.001
+  D_rvol: 2.0
+  D_stabilize: 0.001
+  E_observe_m: 10
+  F_runner: 0.15
+  G_extreme: 0.05
+  G_collapse: 0.20
+  H_compress: 0.40
+  I_sep_m: 5
+  I_fail_pct: 0.003
+  J_short: 0.008
+  J_med: 0.015
+
+families:
+  - id: A
+    title: impulse-pullback-reacceleration
+  - id: B
+    title: breakout acceptance vs rejection
+  - id: C
+    title: relative-strength persistence/decay
+  - id: D
+    title: market divergence/resilience
+  - id: E
+    title: H004 volume-shock resolution
+    lineage: H004
+  - id: F
+    title: multi-day runner + intraday confirmation
+  - id: G
+    title: opening dislocation resolution
+  - id: H
+    title: compression directional release
+  - id: I
+    title: two-attempt success/failure
+  - id: J
+    title: multi-scale agreement/conflict
+  - id: K
+    title: selective multivariate direction
+  - id: L
+    title: selective cross-sectional ranker
+
+jobs:
+  - {id: A.impulse_pb, family: A, kind: algo}
+  - {id: A.impulse_pb_6, family: A, kind: algo, variant: strict}
+  - {id: A.impulse_only, family: A, kind: baseline}
+  - {id: B.accept_up, family: B, kind: algo}
+  - {id: B.reject_up, family: B, kind: algo}
+  - {id: B.accept_dn, family: B, kind: algo}
+  - {id: B.reject_dn, family: B, kind: algo}
+  - {id: C.persist_lead, family: C, kind: algo}
+  - {id: C.decay_lead, family: C, kind: algo}
+  - {id: C.persist_lag, family: C, kind: algo}
+  - {id: C.recover_lag, family: C, kind: algo}
+  - {id: C.raw_mom_long, family: C, kind: baseline}
+  - {id: C.raw_mom_short, family: C, kind: baseline}
+  - {id: D.resil_long, family: D, kind: algo}
+  - {id: D.resil_short, family: D, kind: algo}
+  - {id: E.res_long, family: E, kind: algo, parent: H004}
+  - {id: E.res_short, family: E, kind: algo, parent: H004}
+  - {id: E.fail_up, family: E, kind: algo, parent: H004}
+  - {id: E.fail_dn, family: E, kind: algo, parent: H004}
+  - {id: E.h004_signed, family: E, kind: baseline, parent: H004}
+  - {id: F.cont_long, family: F, kind: algo}
+  - {id: F.fail_short, family: F, kind: algo}
+  - {id: F.cont_short, family: F, kind: algo}
+  - {id: F.fail_long, family: F, kind: algo}
+  - {id: G.cont, family: G, kind: algo}
+  - {id: G.rev, family: G, kind: algo}
+  - {id: H.rel_long, family: H, kind: algo}
+  - {id: H.rel_short, family: H, kind: algo}
+  - {id: I.succ_up, family: I, kind: algo}
+  - {id: I.fail_up, family: I, kind: algo}
+  - {id: I.succ_dn, family: I, kind: algo}
+  - {id: I.fail_dn, family: I, kind: algo}
+  - {id: J.agree, family: J, kind: algo}
+  - {id: J.conflict, family: J, kind: algo}
+  - {id: K.mom_base, family: K, kind: baseline}
+  - {id: K1.all, family: K, kind: model, model: k1, coverage: 1.0}
+  - {id: K1.c20, family: K, kind: model, model: k1, coverage: 0.20}
+  - {id: K1.c10, family: K, kind: model, model: k1, coverage: 0.10}
+  - {id: K1.c05, family: K, kind: model, model: k1, coverage: 0.05}
+  - {id: K1.c02, family: K, kind: model, model: k1, coverage: 0.02}
+  - {id: K2.all, family: K, kind: model, model: k2, coverage: 1.0}
+  - {id: K2.c20, family: K, kind: model, model: k2, coverage: 0.20}
+  - {id: K2.c10, family: K, kind: model, model: k2, coverage: 0.10}
+  - {id: K2.c05, family: K, kind: model, model: k2, coverage: 0.05}
+  - {id: K2.c02, family: K, kind: model, model: k2, coverage: 0.02}
+  - {id: K3.all, family: K, kind: model, model: k3, coverage: 1.0}
+  - {id: K3.c20, family: K, kind: model, model: k3, coverage: 0.20}
+  - {id: K3.c10, family: K, kind: model, model: k3, coverage: 0.10}
+  - {id: K3.c05, family: K, kind: model, model: k3, coverage: 0.05}
+  - {id: K3.c02, family: K, kind: model, model: k3, coverage: 0.02}
+  - {id: L.c10, family: L, kind: model, coverage: 0.10}
+  - {id: L.c05, family: L, kind: model, coverage: 0.05}
+  - {id: L.c02, family: L, kind: model, coverage: 0.02}
+  - {id: L.raw.c10, family: L, kind: baseline, coverage: 0.10}
+  - {id: L.raw.c05, family: L, kind: baseline, coverage: 0.05}
+  - {id: L.raw.c02, family: L, kind: baseline, coverage: 0.02}
+
+note: SIGNAL_ONLY. No sealed OOS. No broker.

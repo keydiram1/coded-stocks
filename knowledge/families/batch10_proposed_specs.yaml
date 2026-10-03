@@ -1,0 +1,469 @@
+# Proposed frozen specs — 10-family FAST SCREEN batch
+# STATUS: PROPOSED — awaiting approval. Not executed. Thresholds not fit to returns.
+# Engine conventions (already in code, not invented here):
+#   ts_utc = minute bar START (naive UTC)
+#   decision_ts = ts_utc + 1 minute = bar CLOSE (ET)
+#   available_at = decision_ts for that bar's OHLCV
+#   entry = open of the bar whose ts_utc == decision_ts (next_bar_open)
+#   RTH: 09:30 <= time_et < 16:00
+#   premarket: 04:00 <= time_et < 09:30
+#   after-hours: 16:00 <= time_et < 20:00
+# SIGNAL_ONLY. Clustered sample = ticker-days / trading days, not raw events.
+
+version: batch10_proposed_v1
+stage1_panel: stage_panels_v1 fast n=50
+universe_default: &UNIVERSE
+  exchanges: [NASDAQ, NYSE, NYSE_AMERICAN]
+  security_type: COMMON_STOCK
+  price_prev_close: {min: 1.0, max: 20.0}
+  source: instruments.parquet join on ticker:<symbol>
+  pit_warning: last CS snapshot per ticker, not daily listing calendar
+horizons_default: [1m, 5m, 15m, 30m, 60m]
+primary_horizon_default: 15m
+execution: {model: next_bar_open_v1, status: SIGNAL_ONLY}
+clustering: {cluster_by: symbol_day, bootstrap_unit: trading_day, multiple_testing: BH, q_target: 0.05}
+
+stage1_defaults: &S1
+  min_ticker_days: 25
+  min_trading_days: 8
+  max_top_ticker_share: 0.50
+  primary_horizon: 15m
+  kill_if_sign_disagrees: true
+  promote: stage complete AND not killed
+  note: PASS is "worth more compute", not an edge.
+
+# -----------------------------------------------------------------------------
+families:
+
+  H001:
+    title: Extreme gap fade
+    lineage:
+      origin: derived_from_result
+      parent: H000 / gap_rvol_continuation_v1
+      frozen_hash: 783aeaac9d848b1368613720f3a2f6aeccd8c4e3fd553071b07159b8acb4bd20
+      relationship: SAME trigger population as Exp #1, OPPOSITE direction, FIRST event per ticker-day. Not independent confirmation.
+    hypothesis: >
+      Names that gap up >=15% at the RTH open with extreme early RVOL have
+      negative SIGNAL_ONLY forward returns after the first qualifying print
+      (fade), rather than continuation.
+    direction: short
+    universe: *UNIVERSE
+    trigger: >
+      gap_pct >= 0.15 AND rvol_5m >= 5.0
+      AND is_rth AND decision_et in [09:35, 10:30]
+    formulas:
+      gap_pct: (rth_open / prev_close) - 1
+      rth_open: open of first RTH bar (time_et=09:30)
+      prev_close: last RTH close of prior session
+      rvol_5m: roll_vol_5m / (typ_1m_vol * 5)
+      roll_vol_5m: sum(volume) over current bar and up to 4 prior bars in 09:25–10:30 slice
+      typ_1m_vol: median of up to 20 prior sessions' median RTH 1-minute volume
+    thresholds_primary: {gap_pct: 0.15, rvol_5m: 5.0}
+    neighborhood_variants:
+      - {id: H001.v1, gap_pct: 0.20, rvol_5m: 5.0}
+      - {id: H001.v2, gap_pct: 0.15, rvol_5m: 8.0}
+    decision_timestamp: close of first qualifying RTH minute (earliest 09:35 ET = 09:34 bar)
+    available_at:
+      prev_close: prior RTH last bar close (~16:00 prior session)
+      rth_open: 09:31 ET (09:30 bar close)
+      roll_vol_5m: decision_ts of signal bar (includes that bar)
+      typ_1m_vol: after prior sessions' RTH close; not today
+    entry: next_bar_open after decision_ts
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 20 sessions typical volume; 1 prior session close
+    features: [prev_close, rth_open, gap_pct, roll_vol_5m, typ_1m_vol, rvol_5m, is_rth, time_et]
+    premarket_ah: premarket 09:25–09:29 MAY enter the 5-bar volume window only; not used in gap
+    stage1: *S1
+    kill: insufficient sample OR sign disagrees (15m mean > 0 for short) OR top ticker share > 0.50
+    promote: S1 complete, ticker_days>=25, trading_days>=8, 15m mean < 0, concentration OK
+    limitations: [SIGNAL_ONLY, PIT identity gap, as-printed splits, 5m RVOL can include 09:25–09:29, derived not independent]
+    future_leak: none in trigger; outcomes after decision by design
+
+  H002:
+    title: Gap holds then continuation
+    lineage: {origin: derived_from_result, parent: H000/H001, note: "Demand-shown subset of large gap-ups, long. Not Exp #1 rerun."}
+    hypothesis: >
+      If a stock gaps up >=15% and then does not trade more than 0.5% below the
+      09:30 open during the first 15 RTH minutes, a later break of that 15-minute
+      high continues (long), because that path showed overnight demand holding.
+    direction: long
+    universe: *UNIVERSE
+    hold_window: >
+      RTH bars with time_et in [09:30, 09:44] inclusive (15 minutes).
+      Last hold bar available_at = 09:45 ET.
+    hold_rule: min(low over hold_window) >= rth_open * 0.995
+    early_high: max(high over hold_window), known at 09:45 ET
+    trigger: >
+      hold_rule true AND first subsequent RTH bar with time_et in [09:45, 10:29]
+      whose high >= early_high.
+    thresholds_primary: {gap_pct: 0.15, hold_buffer: 0.005, breakout: early_high}
+    neighborhood_variants:
+      - {id: H002.v1, hold_buffer: 0.0}
+    decision_timestamp: close of first breakout bar (earliest 09:46 ET)
+    available_at:
+      gap/rth_open/prev_close: as H001 (by 09:31)
+      hold lows and early_high: 09:45 ET
+      breakout bar OHLC: that bar's close
+    entry: next_bar_open after breakout-bar close
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 1 prior RTH close
+    features: [prev_close, rth_open, gap_pct, hold_min_low, early_high]
+    premarket_ah: not used
+    stage1: *S1
+    kill: sample fail OR 15m mean < 0 (long) OR concentration
+    promote: opposite of kill
+    limitations: [SIGNAL_ONLY, hold is 0.5% buffer chosen a priori not fit, not VWAP/HVA, 15m hold clock is one operationalization]
+    future_leak: hold/high use only [09:30,09:44]; breakout uses that bar only; no post-10:30 info
+    material_choice_for_approval: >
+      "Holds" = never more than 0.5% below 09:30 open over 15 minutes, then break
+      that window's high. Not VWAP and not "near the high of day".
+
+  H003:
+    title: Parabolic intraday exhaustion
+    lineage: {origin: independent}
+    hypothesis: >
+      A 15-minute advance that is both large and FRONT-LOADED in the last 5
+      minutes, with expanding volume vs the prior 10 minutes, is exhaustion
+      and fades (short) — not merely "price is up a lot".
+    direction: short
+    universe: *UNIVERSE
+    trigger: >
+      is_rth AND decision_et in [09:50, 15:00]
+      AND ret_15m >= 0.15
+      AND ret_5m >= 0.08
+      AND ret_5m >= 0.50 * ret_15m
+      AND rvol_5m >= 3.0
+      AND roll_vol_5m >= 1.25 * roll_vol_5m_lag10
+    formulas:
+      ret_Nm: close / close.shift(N) - 1 on the same instrument, using closed bars only
+      roll_vol_5m_lag10: roll_vol_5m as of 10 minutes earlier (known then)
+    thresholds_primary: {ret_15m: 0.15, ret_5m: 0.08, frontload: 0.50, rvol_5m: 3.0, vol_expand: 1.25}
+    neighborhood_variants:
+      - {id: H003.v1, ret_15m: 0.20, ret_5m: 0.10, frontload: 0.50, rvol_5m: 3.0, vol_expand: 1.25}
+    decision_timestamp: close of first qualifying bar
+    available_at: all shifts are past bars; current bar included only at its close
+    entry: next_bar_open
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 15 minutes price; 20 sessions typ vol; 15 minutes volume
+    features: [ret_5m, ret_15m, roll_vol_5m, roll_vol_5m_lag10, typ_1m_vol, rvol_5m, prev_close]
+    premarket_ah: not required; 09:50 start so 15m lookback stays in RTH
+    stage1: *S1
+    kill: sample OR 15m mean > 0 OR concentration
+    promote: 15m mean < 0 and sample OK
+    limitations: [SIGNAL_ONLY, acceleration definition is one a priori formula]
+    future_leak: no; 09:50 start avoids using premarket in the 15m return
+
+  H004:
+    title: Volume shock before price shock
+    lineage: {origin: independent}
+    hypothesis: >
+      Abnormal 5-minute volume arriving while 5-minute price change is still
+      small is information/liquidity arrival BEFORE the move. A large unsigned
+      move tends to follow. This is not chasing a move that already happened.
+    direction: unsigned_then_follow
+    direction_note: >
+      MATERIAL CHOICE. Signed long/short cannot be chosen without using the
+      future move. Primary S1 metric is mean |forward_15m|, not signed mean.
+      Signed means are reported but do NOT kill/promote. Variants do not add a
+      "whichever way it went" entry.
+    universe: *UNIVERSE
+    trigger: >
+      is_rth AND decision_et in [09:40, 14:30]
+      AND rvol_5m >= 5.0
+      AND abs(ret_5m) <= 0.012
+    thresholds_primary: {rvol_5m: 5.0, abs_ret_5m_max: 0.012}
+    neighborhood_variants:
+      - {id: H004.v1, rvol_5m: 8.0, abs_ret_5m_max: 0.012}
+    decision_timestamp: close of first qualifying quiet-volume-shock bar
+    available_at: rvol and ret_5m at that bar close only
+    entry: next_bar_open (reference for unsigned |return| too)
+    outcomes: *horizons_default
+    primary_metric: mean_abs_15m
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 5m price/vol; 20d typ vol
+    features: [ret_5m, rvol_5m, typ_1m_vol, roll_vol_5m]
+    premarket_ah: not used if window starts 09:40
+    stage1:
+      min_ticker_days: 25
+      min_trading_days: 8
+      max_top_ticker_share: 0.50
+      primary_horizon: 15m
+      kill_if_sign_disagrees: false
+      kill_if_mean_abs_15m_lt: 0.008
+    promote: mean |15m| >= 0.008 and sample OK
+    kill: sample fail OR mean |15m| < 0.8% OR concentration
+    limitations: [SIGNAL_ONLY, unsigned metric is not a tradable side, 0.8% abs bar is a priori]
+    future_leak: trigger forbids a large already-occurred 5m move; forward |ret| is the outcome not the trigger
+
+  H007:
+    title: Failed breakout / trap
+    lineage: {origin: independent}
+    hypothesis: >
+      A break through yesterday's RTH high that is reversed back through that
+      same high within 15 minutes is a trap; SIGNAL_ONLY path is short after
+      the return through the level.
+    direction: short
+    universe: *UNIVERSE
+    level: prior session RTH high (max high, 09:30<=t<16:00, session D-1)
+    breakout: first RTH bar today with high >= yday_high AND time_et in [09:35, 14:30]
+    return_through: >
+      within 15 minutes after breakout bar start, first bar with low <= yday_high
+    trigger: that return-through bar exists; event at ITS close
+    thresholds_primary: {level: yday_high, through_eps: 0.0, max_trap_minutes: 15}
+    neighborhood_variants:
+      - {id: H007.v1, level: yday_low, direction: long, note: failed breakdown, counts as separate variant}
+    decision_timestamp: close of first return-through bar
+    available_at:
+      yday_high: 16:00 ET prior session
+      breakout high: breakout bar close
+      return low: trap bar close
+    entry: next_bar_open after trap bar
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 1 prior RTH session
+    features: [yday_high, yday_low, prev_close]
+    premarket_ah: not used for the level (RTH yesterday only)
+    stage1: *S1
+    kill: sample OR 15m mean > 0 for primary short OR concentration
+    promote: 15m mean < 0 and sample OK
+    limitations: [SIGNAL_ONLY, not L2 stop-run, 0% tolerance may miss/overcount prints at the exact tick]
+    future_leak: yday level is yesterday; trap uses only bars up to decision; no later confirmation
+
+  H014:
+    title: Volatility compression then expansion
+    lineage: {origin: independent}
+    hypothesis: >
+      When a name's 15-minute range is compressed vs ITS OWN 20-session typical
+      daily range, the first expansion bar's direction persists over the next 15–60m.
+    direction: conditional_on_expansion_bar
+    universe: *UNIVERSE
+    compression: >
+      range_15m / prev_close <= 0.35 * med20_day_range_pct
+      where range_15m = max(high)-min(low) over bars [t-14, t]
+      med20_day_range_pct = median over up to 20 prior sessions of (rth_high-rth_low)/prev_close
+    expansion: >
+      first later bar within 30 minutes with (high-low)/prev_close >= 1.5 * range_15m
+      (the compressed window's range). Direction = sign(close - open) of THAT expansion bar.
+    trigger: compression at T_c then expansion bar T_e; event at T_e close
+    thresholds_primary: {compress_frac: 0.35, expand_mult: 1.5, expand_max_wait_m: 30}
+    neighborhood_variants:
+      - {id: H014.v1, compress_frac: 0.25, expand_mult: 1.5, expand_max_wait_m: 30}
+    decision_timestamp: expansion bar close (not the compression print)
+    available_at:
+      med20_day_range: prior sessions only
+      range_15m: T_c close
+      expansion OHLC: T_e close
+    entry: next_bar_open after T_e; side = long if T_e close>open else short
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 15 minutes + 20 sessions daily range
+    features: [range_15m, med20_day_range_pct, prev_close, expansion_bar_dir]
+    premarket_ah: not used; RTH only 09:50–14:30 so 15m window is RTH
+    stage1:
+      <<: *S1
+      kill_if_sign_disagrees: true
+      note: signed mean is in the expansion-bar direction
+    kill: sample OR 15m mean < 0 (wrong way vs expansion) OR concentration
+    promote: 15m mean > 0 vs expansion direction
+    limitations: [SIGNAL_ONLY, daily range proxy is not 15m-historical range distribution]
+    future_leak: expansion direction from T_e only; no bars after T_e in the trigger
+    material_choice_for_approval: compression vs 20d daily RTH range, not vs recent 15m ranges (cheaper shared daily feature)
+
+  H022:
+    title: Same-morning gap crowding
+    lineage: {origin: independent, related: H001}
+    hypothesis: >
+      When many names already show large 09:30 gaps (a crowded gap morning),
+      a subsequent large-gap+RVOL name is a crowded auction and fades (short).
+    direction: short
+    universe: *UNIVERSE
+    crowding_state: >
+      At 09:31 ET, count N_gap10 = number of universe names whose
+      (09:30 open / prev_close - 1) >= 0.10.
+      This uses only 09:30 opens and prior closes. No later prints. No EOD count.
+    trigger: >
+      H001 primary trigger (gap>=0.15, rvol>=5, 09:35–10:30, first event)
+      AND N_gap10 >= 80
+    thresholds_primary: {gap_other: 0.10, N_gap10: 80, self_gap: 0.15, rvol_5m: 5.0}
+    neighborhood_variants:
+      - {id: H022.v1, N_gap10: 120, self_gap: 0.15, rvol_5m: 5.0}
+    decision_timestamp: same as H001 first event (cannot be before 09:35; crowding frozen at 09:31)
+    available_at:
+      N_gap10: 09:31 ET
+      self gap/rvol: signal bar close
+    entry: next_bar_open
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 20d typ vol; all names' 09:30 opens that morning (cross-section, same timestamp)
+    features: [N_gap10, gap_pct, rvol_5m, prev_close, rth_open]
+    premarket_ah: not used
+    stage1: *S1
+    kill: sample OR 15m mean > 0 OR concentration
+    promote: 15m mean < 0 and sample OK
+    limitations: [SIGNAL_ONLY, 80 is a priori not a percentile of history (avoids leaking panel construction)]
+    future_leak: other names' 09:30 open is simultaneous; we wait until 09:31 so those bars are closed. We do NOT add names who gap later in the morning.
+    material_choice_for_approval: crowding is 09:30-gap count >=80, not a rolling count of 09:35–10:29 signals (that would mix later information into early events).
+
+  H028:
+    title: After-hours to next RTH
+    lineage: {origin: independent}
+    hypothesis: >
+      A large D-1 after-hours move (16:00–20:00 vs D-1 RTH close) continues
+      into D's first RTH hour. Premarket on D is NOT an input.
+    direction: conditional_sign_of_AH
+    universe: *UNIVERSE
+    anchors:
+      rth_close_Dminus1: last RTH bar close session D-1 (available ~16:00 D-1)
+      ah_close_Dminus1: last bar with 16:00<=time_et<20:00 on D-1 (available at that bar close, latest <20:00)
+      ah_ret: ah_close_Dminus1 / rth_close_Dminus1 - 1
+      not_used: D premarket; D 09:30 open is ENTRY not trigger
+    trigger: abs(ah_ret) >= 0.05
+    side: long if ah_ret>0 else short
+    thresholds_primary: {abs_ah_ret: 0.05}
+    neighborhood_variants:
+      - {id: H028.v1, role: fade, side: short if ah_ret>0 else long, abs_ah_ret: 0.05}
+      - {id: H028.v2, abs_ah_ret: 0.08, role: continuation_stronger}
+    decision_timestamp: >
+      09:31 ET on session D (first RTH bar close). Signal itself was known
+      at D-1 20:00; we do not enter in AH. 09:30 open is not a trigger input.
+    available_at:
+      ah_ret: D-1 last AH bar close
+      entry_open: 09:30 D (execution, not used to decide membership)
+    entry: 09:30 open of D (next_bar_open relative to a synthetic 09:29 decision, operationally first RTH open)
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: D-1 RTH + D-1 AH only
+    features: [rth_close_prev, ah_close_prev, ah_ret]
+    premarket_ah: AH yes; premarket no
+    stage1: *S1
+    kill: sample OR 15m mean < 0 in AH-continuation sign OR concentration
+    promote: 15m mean > 0 in continuation sign
+    limitations: [SIGNAL_ONLY, AH bars may be sparse, 09:30 open can gap vs AH last — that gap is OUTCOME contamination not a trigger]
+    future_leak: trigger does not use D premarket or D RTH after 09:30
+    material_choice_for_approval: PRIMARY is AH continuation into RTH, not fade. Fade is registered variant H028.v1 and counts in BH.
+
+  H037:
+    title: First touch of yesterday high/low
+    lineage: {origin: independent}
+    hypothesis: >
+      First RTH tag of yesterday's RTH high acts as leftover resistance (short).
+      Downside tag of yesterday's low is a separate variant (long), not pooled.
+    direction: short
+    universe: *UNIVERSE
+    level: yday_high = max(high) RTH D-1
+    touch: first RTH bar today with high >= yday_high  (tolerance 0)
+    window: decision_et in [09:35, 15:00]
+    thresholds_primary: {tolerance: 0.0, level: yday_high}
+    neighborhood_variants:
+      - {id: H037.v1, level: yday_low, touch: low <= yday_low, direction: long}
+    decision_timestamp: close of first touching bar
+    available_at:
+      yday_high/low: 16:00 D-1
+      touch bar: that close
+    entry: next_bar_open
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 1 prior RTH session
+    features: [yday_high, yday_low, prev_close]
+    premarket_ah: yesterday RTH only; today's premarket does not count as a touch
+    stage1: *S1
+    kill: sample OR 15m mean > 0 (primary short) OR concentration
+    promote: 15m mean < 0
+    limitations: [SIGNAL_ONLY, 0% tolerance, as-printed yday high includes unadjusted prints]
+    future_leak: yday extremes known before today RTH; first touch only uses that bar
+
+  H040:
+    title: Weekend/Monday gap
+    lineage: {origin: independent, contrast: H001}
+    hypothesis: >
+      Monday open gaps embed weekend information/risk and gap-ups fade (short).
+      Monday gap-downs and midweek gap-ups are SEPARATE variants, never pooled
+      into one mean.
+    direction: short
+    universe: *UNIVERSE
+    trigger: >
+      weekday(session_date)==Monday
+      AND gap_pct >= 0.08
+      AND is_rth AND decision_et in [09:35, 09:36]
+    thresholds_primary: {gap_pct: 0.08, weekday: Monday, side: short, gap_sign: up}
+    neighborhood_variants:
+      - {id: H040.v1, weekday: Monday, gap_pct: -0.08, op: "<=", direction: long, name: monday_gap_down_bounce}
+      - {id: H040.v2, weekday: [Tue,Wed,Thu], gap_pct: 0.08, direction: short, name: midweek_gap_up_fade_control}
+    decision_timestamp: 09:35 ET (09:34 bar close)
+    available_at: gap at 09:31; calendar known; no rvol required
+    entry: next_bar_open
+    outcomes: *horizons_default
+    event_policy: first_ticker_day
+    max_events_per_ticker_day: 1
+    lookback: 1 prior close
+    features: [gap_pct, prev_close, rth_open, weekday]
+    premarket_ah: not used
+    stage1:
+      min_ticker_days: 15
+      min_trading_days: 4
+      max_top_ticker_share: 0.50
+      primary_horizon: 15m
+      kill_if_sign_disagrees: true
+      note: Monday-only sparsity; mins lowered a priori, not from data peek
+    kill: sample OR 15m mean > 0 for primary short OR concentration
+    promote: 15m mean < 0 and sample OK
+    limitations: [SIGNAL_ONLY, fewer Mondays on 50-day panel, 8% is not Exp #1 15%]
+    future_leak: none
+
+# -----------------------------------------------------------------------------
+shared_feature_matrix:
+  columns: [H001, H002, H003, H004, H007, H014, H022, H028, H037, H040]
+  rows:
+    prev_close:              [1,1,1,1,1,1,1,1,1,1]
+    rth_open_gap:            [1,1,0,0,0,0,1,0,0,1]
+    typ_1m_vol_rvol:         [1,0,1,1,0,0,1,0,0,0]
+    rolling_5m_volume:       [1,0,1,1,0,0,1,0,0,0]
+    ret_5m_ret_15m:          [0,0,1,1,0,0,0,0,0,0]
+    hold_window_09_30_09_44: [0,1,0,0,0,0,0,0,0,0]
+    yday_rth_high_low:       [0,0,0,0,1,0,0,0,1,0]
+    med20_daily_range:       [0,0,0,0,0,1,0,0,0,0]
+    range_15m:               [0,0,0,0,0,1,0,0,0,0]
+    N_gap10_at_0931:         [0,0,0,0,0,0,1,0,0,0]
+    ah_ret_vs_rth_close:     [0,0,0,0,0,0,0,1,0,0]
+    weekday:                 [0,0,0,0,0,0,0,0,0,1]
+    premarket_except_rvol_window: [H001_only_possible_09_25]
+    today_premarket_as_signal: [0,0,0,0,0,0,0,0,0,0]
+
+once_per_day_shared:
+  - read parquet + session TZ (dominant IO)
+  - prev_close / rth_open / rth_high / rth_low / rth_close / rth_med_vol
+  - yday_high/low (from yesterday's daily row)
+  - ah_ret (from yesterday AH vs RTH close)
+  - med20_daily_range, typ_1m_vol (from rolling daily table)
+  - N_gap10 at 09:31 (one cross-sectional count per morning)
+  - weekday
+per_family_after_shared:
+  - H001/H022/H040: filter 09:25–10:30 slice + rvol
+  - H002: hold window agg + first break
+  - H003/H004: extra rolling ret on RTH
+  - H007: first break then 15m look-ahead within day (past-only at event)
+  - H014: 15m range then wait for expansion bar
+  - H028: membership from yesterday AH only; entry at 09:30
+
+runtime_estimate:
+  profile: 4.3s/day mostly 49% parquet + 38% python outcomes
+  shared_scan: one read+TZ per day for all 10 ≈ 2.1s IO+TZ (not ×10)
+  family_work: filters on trigger slice, much cheaper than a second full-day sort
+  outcomes: still the CPU risk; vectorize forward close-join for S1; skip MFE/MAE/barriers on S1
+  cache: daily session table (one row per ticker-day) after first pass; reuse for S2/S3
+  concurrency: do NOT 10× process the same file; single consumer day-loop, 10 in-memory evaluations
+  workers: 1 scan thread + optional 2 outcome workers if RAM allows; avoid 10 parallel readers
+  fast_50d: ~50 * (2.1s IO + ~0.5–2s families + cheap outcomes) ≈ 3–6 min if outcomes vectorized; 15–25 min if Python outcomes kept
+  not_40x75min: yes, if shared scan + S1 kill holds

@@ -1,0 +1,11 @@
+{
+  "report": "C:\\Users\\IVS\\quant-edge-lab\\reports\\discovery\\directional_campaign_v3.md",
+  "freeze": {
+    "manifest": "a2b513f282e0b4cb70627cc724ef05cc28d2d892e70bb93e8a145e8f888fcfa6",
+    "gates": "3e41f0222ccc38d168b862169a384f1055f60c68f2934889959cdd40d1e5ee0f",
+    "git": "UNCOMMITTED"
+  },
+  "survivors": [],
+  "news_onset": "2024-08-01",
+  "resumed_news_jobs": true
+}

@@ -1,0 +1,148 @@
+# FROZEN 2026-10-02 BEFORE observing Worker A/B results.
+# Neighborhoods are a priori. Do not add parameters from outcomes.
+# Decision timestamp: close of the last bar used in the trigger + 1 minute
+# (available_at = decision_ts). Entry = next_bar_open. SIGNAL_ONLY.
+
+version: directional_batch_v1
+parent_unsigned: H004
+frozen_gates: knowledge/families/directional_gates_v1.yaml
+entry: next_bar_open
+horizons: [1m, 5m, 15m, 30m, 60m]
+event_policy: first_ticker_day
+max_events_per_ticker_day: 1
+
+worker_a:
+  purpose: >
+    Given existing H004 quiet-volume-shock events, can causal information at
+    the event timestamp predict the SIGN of the subsequent move?
+  reuse: >
+    Signed baseline from batch10-full compact parquet (H004 / H004.v1).
+    Directional models re-detect the same frozen H004 trigger and assign side
+    using only bars with ts_utc <= decision bar.
+  jobs:
+    - id: D004.mom5
+      class: continuation
+      parent: H004
+      rationale: Quiet 5m path still has a signed drift; follow it.
+      side_rule: LONG if ret_5m > 0 else SHORT
+      no_trade: ret_5m == 0
+    - id: D004.fade5
+      class: reversal
+      parent: H004
+      rationale: Volume shock after a small signed drift is exhaustion.
+      side_rule: SHORT if ret_5m > 0 else LONG
+    - id: D004.gap
+      class: continuation
+      parent: H004
+      rationale: Gap is the multi-session state; follow gap through the shock.
+      side_rule: LONG if gap_pct > 0 else SHORT
+    - id: D004.gap_fade
+      class: reversal
+      parent: H004
+      rationale: Gap already happened; volume shock is the fade.
+      side_rule: SHORT if gap_pct > 0 else LONG
+    - id: D004.range
+      class: location
+      parent: H004
+      rationale: Location in today's RTH range is inventory/path.
+      side_rule: LONG if close in upper 40% of RTH range so far else SHORT
+    - id: D004.select
+      class: selective
+      parent: H004
+      rationale: Only trade when quiet path is not tiny; else NO TRADE.
+      side_rule: same as mom5
+      no_trade: abs(ret_5m) < 0.004 OR rvol_5m < 6
+    - id: D004.score
+      class: model
+      parent: H004
+      rationale: Frozen linear score of gap, 5m/15m path, rvol, time of day.
+      side_rule: LONG if score > 0.012, SHORT if score < -0.012 else NO TRADE
+      score: 2.0*gap_pct + 1.5*ret_5m + 0.5*ret_15m + 0.02*min(rvol_5m,10)/10 - 0.0004*minutes_from_open
+
+worker_b:
+  jobs:
+    - id: D101
+      class: multi_signal
+      mechanism: continuation
+      rationale: Gap + volume + still-quiet 5m + above session VWAP proxy.
+      trigger: >
+        is_rth 09:50-14:30 AND gap_pct >= 0.05 AND rvol_5m >= 4
+        AND abs(ret_5m) <= 0.02 AND close >= vwap_15m
+      side: long
+    - id: D102
+      class: multi_signal
+      mechanism: reversal
+      rationale: Same setup as D101, fade the gap (symmetric test).
+      trigger: same as D101
+      side: short
+    - id: D103
+      class: state_machine
+      mechanism: continuation
+      rationale: Compression SETUP then 15m-high/low break, 5-bar confirmation.
+      trigger: >
+        RTH 10:00-14:30. SETUP = range_15m/prev_close <= 0.40*med20_range.
+        BREAK = close beyond prior 15m high (long) or low (short).
+        CONFIRM = 5 bars later still beyond the break level. Else invalid.
+      side: from_break
+    - id: D105
+      class: relative
+      mechanism: catchup
+      rationale: Name lagged the same-morning cross-section while market is up.
+      trigger: >
+        At 10:15, stock ret_from_open <= cross_section p20 AND
+        equal-weight market ret_from_open >= 0.002 AND rvol_5m >= 2
+      side: long
+    - id: D106
+      class: multi_timeframe
+      mechanism: reclaim
+      rationale: Prior day up, gap down, first 20m holds above day's low then reclaim.
+      trigger: >
+        yday_ret > 0 AND gap_pct <= -0.03 AND time 09:50-10:30
+        AND close >= rth_open AND low_so_far > rth_low * 0 + close > rth_low_so_far * 1
+        AND close >= rth_open
+      side: long
+    - id: D107
+      class: regime
+      mechanism: conditional
+      rationale: Gap-up meaning depends on first-30m market regime.
+      trigger: gap_pct >= 0.04 at 10:05, first event
+      side: >
+        if mkt_30m > 0.003 then SHORT (fade in risk-on open);
+        elif mkt_30m < -0.003 then LONG (continuation in risk-off);
+        else NO TRADE
+    - id: D108
+      class: sequential
+      mechanism: continuation
+      rationale: Impulse → pause → volume restart → follow impulse.
+      trigger: >
+        10:00-14:30. Impulse 15m ago abs(ret_5m)>=0.02;
+        pause abs(close_now-5 / close_impulse - 1)<=0.006;
+        volume restart roll_vol_5m >= 1.5 * roll_vol_10m_then.
+      side: sign of impulse
+    - id: D109
+      class: sequential
+      mechanism: reversal
+      rationale: Same impulse+pause; volume without new extreme fades.
+      trigger: same sequential skeleton as D108 plus failed new high/low
+      side: opposite of impulse
+    - id: D111
+      class: state_machine
+      mechanism: trap
+      rationale: Opening-range break that fails back inside is a trap.
+      trigger: >
+        OR = 09:30-09:45 high/low. After 09:50, first close outside OR,
+        then within 20m a close back inside OR. Enter on that fail bar.
+      side: short if fail after upside break else long
+    - id: D112
+      class: multi_timeframe
+      mechanism: either
+      rationale: AH move vs opening 5m — same sign continuation, else fade.
+      trigger: abs(ah_ret)>=0.03 AND time 09:36-10:15 first 5m ret available
+      side: long if sign(ah_ret)==sign(ret_5m) else short
+    - id: D110
+      class: model
+      mechanism: selective
+      rationale: Frozen linear score on gap, path, rvol, yday, TOD. NO TRADE band.
+      trigger: RTH 09:50-14:30, rvol_5m>=3, abs(gap_pct)>=0.02
+      side: LONG if score>0.02, SHORT if score<-0.02 else NO TRADE
+      score: 1.5*gap_pct + 1.2*ret_5m + 0.4*yday_ret + 0.015*min(rvol_5m,12)/12

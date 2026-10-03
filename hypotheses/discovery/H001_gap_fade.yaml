@@ -1,0 +1,60 @@
+id: H001_gap_fade
+family: gap_fade
+description: >
+  First qualifying extreme gap+RVOL per ticker-day; test SHORT mean-reversion.
+  Derived from rejected long continuation (Experiment #1). SIGNAL_ONLY.
+side: short
+universe:
+  exchanges:
+    - NASDAQ
+    - NYSE
+    - NYSE_AMERICAN
+  security_type: COMMON_STOCK
+  price_prev_close:
+    min: 1.0
+    max: 20.0
+trigger:
+  session: RTH
+  time_et:
+    start: "09:35"
+    end: "10:30"
+  conditions:
+    - feature: gap_pct
+      op: ">="
+      value: 0.15
+    - feature: rvol_5m
+      op: ">="
+      value: 5.0
+features:
+  gap_pct:
+    asof: event_time
+  rvol_5m:
+    asof: event_time
+    window: 5m
+outcomes:
+  forward_returns:
+    - 1m
+    - 5m
+    - 15m
+    - 30m
+    - 60m
+  barriers:
+    take_profit: 0.03
+    stop_loss: -0.02
+  calculate:
+    - MFE
+    - MAE
+execution:
+  discovery_model: next_bar_open
+  status: SIGNAL_ONLY
+statistics:
+  cluster_by: symbol_day
+  bootstrap_unit: trading_day
+  multiple_testing: BH
+  q_target: 0.05
+validation:
+  chronological: true
+  freeze_before_oos: true
+falsification:
+  - First-event-only may still cluster on a few days.
+  - Hold-near-high vs lose-open not partitioned here.

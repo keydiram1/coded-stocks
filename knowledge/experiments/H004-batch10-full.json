@@ -1,0 +1,44 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-full",
+  "family_id": "H004",
+  "variant_id": "H004.v1",
+  "stage": "full",
+  "decision": "PASS",
+  "reason": "pre-registered stage criteria satisfied (not an edge claim)",
+  "events": 1211159,
+  "ticker_days": 779780,
+  "trading_days": 1254,
+  "means": {
+    "1m": 4.3520671300747226e-05,
+    "5m": 9.882569806831001e-05,
+    "15m": 0.010440700545812176,
+    "30m": 9.322290198045904e-05,
+    "60m": 0.0001683291288742808
+  },
+  "unsigned_metric": true,
+  "expected_direction": "either",
+  "concentration_top_ticker_share": 0.0013632050065403062,
+  "primary_stats": {
+    "horizon": "15m",
+    "n": 779780,
+    "mean": 0.010440700545812176,
+    "median": 0.0055710306406684396,
+    "std": 0.01644214594968665,
+    "q10": 0.0005344735435597325,
+    "q25": 0.002142857142857113,
+    "q50": 0.0055710306406684396,
+    "q75": 0.012461059190031154,
+    "q90": 0.024249683203428074,
+    "win_rate": 0.9322424273513042,
+    "ttest_p": 0.0,
+    "bootstrap_p": 0.0,
+    "bootstrap_ci_95": [
+      0.010349734752193897,
+      0.010537387311699013
+    ],
+    "abs_metric": true
+  },
+  "note": "SIGNAL_ONLY; not an edge; frozen criteria only",
+  "recorded_at": "2026-10-02T16:47:54.547540+00:00"
+}

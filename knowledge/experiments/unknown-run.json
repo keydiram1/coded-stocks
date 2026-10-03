@@ -1,0 +1,10 @@
+{
+  "type": "v2_model",
+  "job": "K3.c02",
+  "stage": "falsify",
+  "decision": "KILL",
+  "reason": "sign disagrees (decision-signed mean_15m=-0.0026406900921576598) | model eval on chronological holdout only",
+  "n": 935,
+  "mean": -0.0026406900921576598,
+  "recorded_at": "2026-10-03T07:29:22.694335+00:00"
+}

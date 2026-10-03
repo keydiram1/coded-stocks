@@ -1,0 +1,97 @@
+{
+  "batch_id": "batch10-fast",
+  "at": "2026-10-02T13:05:51.946891+00:00",
+  "jobs": [
+    {
+      "type": "stage_result_direction_correction",
+      "batch_id": "batch10-fast",
+      "family_id": "H007",
+      "variant_id": "H007.v1",
+      "job_key": "H007.v1",
+      "stage": "fast",
+      "original_decision": "KILL",
+      "original_reason": "sign disagrees with expected_direction=short mean_15m=9.968613801238523e-05",
+      "corrected_decision": "PASS",
+      "corrected_reason": "pre-registered stage criteria satisfied (not an edge claim)",
+      "original_expected_direction": "short",
+      "frozen_expected_direction": "long",
+      "events": 10519,
+      "ticker_days": 10519,
+      "means": {
+        "15m": 9.968613801238523e-05,
+        "1m": 8.486518116540484e-05,
+        "30m": -9.781227711379482e-05,
+        "5m": 0.0002666772989565538,
+        "60m": -0.0012329656407617088
+      },
+      "means_unchanged": true,
+      "note": "SIGNAL_ONLY; not an edge; original KILL kept in audit",
+      "recorded_at": "2026-10-02T13:05:51.946891+00:00"
+    },
+    {
+      "type": "stage_result_direction_correction",
+      "batch_id": "batch10-fast",
+      "family_id": "H037",
+      "variant_id": "H037.v1",
+      "job_key": "H037.v1",
+      "stage": "fast",
+      "original_decision": "KILL",
+      "original_reason": "sign disagrees with expected_direction=short mean_15m=0.001262020271457123",
+      "corrected_decision": "PASS",
+      "corrected_reason": "pre-registered stage criteria satisfied (not an edge claim)",
+      "original_expected_direction": "short",
+      "frozen_expected_direction": "long",
+      "events": 69078,
+      "ticker_days": 69078,
+      "means": {
+        "1m": -0.0004370938796157263,
+        "15m": 0.001262020271457123,
+        "5m": -0.00042608199132534877,
+        "30m": -6.995708651340764e-05,
+        "60m": 9.399127876669716e-05
+      },
+      "means_unchanged": true,
+      "note": "SIGNAL_ONLY; not an edge; original KILL kept in audit",
+      "recorded_at": "2026-10-02T13:05:51.946891+00:00"
+    },
+    {
+      "type": "stage_result_direction_correction",
+      "batch_id": "batch10-fast",
+      "family_id": "H040",
+      "variant_id": "H040.v1",
+      "job_key": "H040.v1",
+      "stage": "fast",
+      "original_decision": "KILL",
+      "original_reason": "sign disagrees with expected_direction=short mean_15m=0.00426478966180727",
+      "corrected_decision": "PASS",
+      "corrected_reason": "pre-registered stage criteria satisfied (not an edge claim)",
+      "original_expected_direction": "short",
+      "frozen_expected_direction": "long",
+      "events": 4181,
+      "ticker_days": 4181,
+      "means": {
+        "1m": -0.00011950635332625076,
+        "60m": 0.005726009327980286,
+        "15m": 0.00426478966180727,
+        "30m": 0.004044139730284363,
+        "5m": 0.0004794046014215717
+      },
+      "means_unchanged": true,
+      "note": "SIGNAL_ONLY; not an edge; original KILL kept in audit",
+      "recorded_at": "2026-10-02T13:05:51.946891+00:00"
+    }
+  ],
+  "stage2_eligible": [
+    "H001.v1",
+    "H004",
+    "H004.v1",
+    "H007",
+    "H007.v1",
+    "H028.v1",
+    "H028.v2",
+    "H037",
+    "H037.v1",
+    "H040",
+    "H040.v1"
+  ]
+}

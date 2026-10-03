@@ -1,0 +1,65 @@
+# FROZEN 2026-10-02 BEFORE any Worker A/B directional results.
+# Do not edit after launch. Stronger than batch10 sign-only promotion.
+# Physical IO: one shared daily parquet scan; Worker A and Worker B are logical
+# concurrent researchers, not two processes rereading 2B rows.
+
+version: dir_gates_v1
+primary_horizon: 15m
+returns_are_signed_to_decision: true
+note: >
+  Positive 15m mean means the algorithm's LONG/SHORT decision was correct on
+  average. Unsigned |return| cannot PASS. Tiny signed means cannot PASS.
+  Early (fast) gates stay looser than full. NO TRADE events are excluded from
+  ticker-day counts. SIGNAL_ONLY. Not an edge claim. No sealed OOS.
+
+stages:
+  fast:
+    min_ticker_days: 30
+    min_trading_days: 8
+    min_abs_mean_15m: 0.0012
+    min_win_rate: null
+    min_frac_days_agree: null
+    min_median_same_sign: false
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.50
+    kill_if_sign_disagrees: true
+  falsify:
+    min_ticker_days: 40
+    min_trading_days: 12
+    min_abs_mean_15m: 0.0015
+    min_win_rate: 0.48
+    min_frac_days_agree: 0.45
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.48
+    kill_if_sign_disagrees: true
+  broad:
+    min_ticker_days: 80
+    min_trading_days: 25
+    min_abs_mean_15m: 0.0018
+    min_win_rate: 0.50
+    min_frac_days_agree: 0.48
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.45
+    kill_if_sign_disagrees: true
+  full:
+    min_ticker_days: 200
+    min_trading_days: 80
+    min_abs_mean_15m: 0.0020
+    min_win_rate: 0.51
+    min_frac_days_agree: 0.50
+    min_median_same_sign: true
+    require_ci_excludes_zero: true
+    max_top_ticker_share: 0.40
+    kill_if_sign_disagrees: true
+
+derived_rule: >
+  If a complete stage KILLs for sign disagreement and abs(mean_15m) >= 2 *
+  that stage's min_abs_mean_15m, record a derived opposite-side hypothesis
+  with lineage and freeze it before testing on the NEXT unseen panel only.
+
+h004_stop: >
+  If every H004 directional model is KILL after the fast stage, record
+  H004 = VALIDATED VOLATILITY PHENOMENON / NO DIRECTIONAL EDGE FOUND and do
+  not spend further full-panel compute on new H004 directional mining.

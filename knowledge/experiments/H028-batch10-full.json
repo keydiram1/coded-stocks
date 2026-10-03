@@ -1,0 +1,44 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-full",
+  "family_id": "H028",
+  "variant_id": "H028.v1",
+  "stage": "full",
+  "decision": "KILL",
+  "reason": "sign disagrees with expected_direction=long mean_15m=-0.00037943698041130436",
+  "events": 200127,
+  "ticker_days": 57537,
+  "trading_days": 1254,
+  "means": {
+    "1m": -0.0002096500823103216,
+    "5m": -0.00026474388476230455,
+    "15m": -0.00037943698041130436,
+    "30m": -0.0002474792937612939,
+    "60m": -0.0006028529448711349
+  },
+  "unsigned_metric": false,
+  "expected_direction": "long",
+  "concentration_top_ticker_share": 0.0014251698906790414,
+  "primary_stats": {
+    "horizon": "15m",
+    "n": 57537,
+    "mean": -0.00037943698041130436,
+    "median": 0.0,
+    "std": 0.05759106190966541,
+    "q10": -0.05882352941176472,
+    "q25": -0.023965141612200425,
+    "q50": 0.0,
+    "q75": 0.02470930232558144,
+    "q90": 0.05759319148936172,
+    "win_rate": 0.49632410448928516,
+    "ttest_p": 0.11402815517409012,
+    "bootstrap_p": 0.134,
+    "bootstrap_ci_95": [
+      -0.0008739827776529373,
+      0.00012739092293655703
+    ],
+    "abs_metric": false
+  },
+  "note": "SIGNAL_ONLY; not an edge; frozen criteria only",
+  "recorded_at": "2026-10-02T16:51:28.020838+00:00"
+}

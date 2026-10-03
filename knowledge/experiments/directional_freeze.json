@@ -1,0 +1,14 @@
+{
+  "type": "directional_freeze",
+  "created_at": "2026-10-02T17:28:54.342781+00:00",
+  "hashes": {
+    "gates": "a6c14900b745faa860338b23e4502882582a6353cb61a6ce9017ddb285369e07",
+    "batch": "0dd4aff6f44087abae82b90723c8c2bfb9dfd5fd06d0e62e79021dfe7d1c0aa1",
+    "gates_path": "knowledge/families/directional_gates_v1.yaml",
+    "batch_path": "knowledge/families/directional_batch_v1.yaml"
+  },
+  "gates": "knowledge\\families\\directional_gates_v1.yaml",
+  "batch": "knowledge\\families\\directional_batch_v1.yaml",
+  "git": "UNCOMMITTED",
+  "note": "Frozen before Worker A/B results."
+}

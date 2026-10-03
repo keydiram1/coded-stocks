@@ -1,0 +1,9 @@
+{
+  "report": "C:\\Users\\IVS\\quant-edge-lab\\reports\\discovery\\directional_campaign_v2.md",
+  "freeze": {
+    "manifest": "6db89eddfd77b530dd7cf762a73fa0f3909ddef17d0b94feef3a320135bcb793",
+    "gates": "04703dc9def30fb7e85e420173d2eca3d96a72b20ceed914642e940785719a71",
+    "git": "UNCOMMITTED"
+  },
+  "survivors": []
+}

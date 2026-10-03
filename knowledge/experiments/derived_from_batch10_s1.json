@@ -1,0 +1,38 @@
+{
+  "type": "derived_hypotheses",
+  "source_batch": "batch10-fast",
+  "frozen_spec_untouched": "knowledge/families/batch10_frozen_v1.yaml",
+  "created_at": "2026-10-02T13:16:01.797388+00:00",
+  "hypotheses": [
+    {
+      "id": "H002.fade",
+      "parent": "H002",
+      "origin": "derived_from_result",
+      "relationship": "SAME frozen hold-near-high trigger, OPPOSITE side (short)",
+      "why": "Stage-1 long continuation after hold-near-high had negative 15m mean; fade is the directional opposite, not a new threshold.",
+      "queue": "exploratory",
+      "not_in_parent_batch10": true,
+      "thresholds_from_parent_frozen": true
+    },
+    {
+      "id": "H003.cont",
+      "parent": "H003",
+      "origin": "derived_from_result",
+      "relationship": "SAME frozen parabolic trigger, OPPOSITE side (long continuation)",
+      "why": "Stage-1 short exhaustion had large positive 15m mean (continuation, not fade). Opposite uses the same a-priori trigger.",
+      "queue": "exploratory",
+      "not_in_parent_batch10": true,
+      "thresholds_from_parent_frozen": true
+    },
+    {
+      "id": "OBS-H028-fade-vs-continuation",
+      "parent": "H028",
+      "origin": "derived_from_result",
+      "relationship": "Already registered H028.v1 fade vs primary continuation",
+      "why": "Primary AH continuation killed on S1; fade variant passed. No new spec.",
+      "queue": "parent_variants_already_running",
+      "not_in_parent_batch10": false
+    }
+  ],
+  "note": "SIGNAL_ONLY observations. Not substituted into parent experiment. BH: exploratory tests are a separate family."
+}

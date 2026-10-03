@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-edge-lab"
+version = "0.1.0"
+description = "Local scientific engine for discovering and falsifying short-horizon equity edges."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "duckdb>=1.1.0",
+  "polars>=1.9.0",
+  "pydantic>=2.8.0",
+  "pyyaml>=6.0.1",
+  "numpy>=2.0.0",
+  "scipy>=1.13.0",
+  "statsmodels>=0.14.2",
+  "pandas>=2.2.2",
+  "matplotlib>=3.9.0",
+  "typer>=0.12.5",
+  "rich>=13.7.1",
+  "tzdata>=2024.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.6.0",
+]
+
+[project.scripts]
+quant-edge = "quant_edge_lab.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

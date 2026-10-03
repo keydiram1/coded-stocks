@@ -1,0 +1,39 @@
+{
+  "type": "directional_stage_result",
+  "batch_id": "dir-two-workers-v1",
+  "job": "D110",
+  "worker": "B",
+  "stage": "fast",
+  "decision": "KILL",
+  "reason": "sign disagrees (decision-signed mean_15m=-0.00017492175500965283)",
+  "events": 79160,
+  "ticker_days": 45329,
+  "primary": {
+    "horizon": "15m",
+    "n": 45329,
+    "mean": -0.00017492175500965283,
+    "median": 0.0,
+    "std": 0.01783310832758404,
+    "q10": -0.015432779343106495,
+    "q25": -0.006122448979591688,
+    "q50": 0.0,
+    "q75": 0.005977584059775998,
+    "q90": 0.01483472379739098,
+    "win_rate": 0.47208189018067903,
+    "ttest_p": 0.036771163941041095,
+    "bootstrap_p": 0.444,
+    "bootstrap_ci_95": [
+      -0.0006152552500495843,
+      0.00024645392363633744
+    ],
+    "abs_metric": false
+  },
+  "freeze": {
+    "gates": "a6c14900b745faa860338b23e4502882582a6353cb61a6ce9017ddb285369e07",
+    "batch": "0dd4aff6f44087abae82b90723c8c2bfb9dfd5fd06d0e62e79021dfe7d1c0aa1",
+    "gates_path": "knowledge/families/directional_gates_v1.yaml",
+    "batch_path": "knowledge/families/directional_batch_v1.yaml"
+  },
+  "note": "SIGNAL_ONLY; directional gates dir_gates_v1",
+  "recorded_at": "2026-10-02T17:46:38.075723+00:00"
+}

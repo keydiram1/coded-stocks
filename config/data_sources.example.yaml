@@ -1,0 +1,14 @@
+# Future providers. The lab runs today with SampleDataProvider (no secrets).
+default_provider: sample
+
+providers:
+  sample:
+    type: sample
+    bars: data/sample/bars_1m.parquet
+  massive:
+    type: massive
+    # MASSIVE_API_KEY in environment — adapter not implemented in this slice
+    enabled: false
+  databento:
+    type: databento
+    enabled: false

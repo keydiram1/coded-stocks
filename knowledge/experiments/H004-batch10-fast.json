@@ -1,0 +1,21 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-fast",
+  "family_id": "H004",
+  "variant_id": "H004.v1",
+  "stage": "fast",
+  "decision": "PASS",
+  "reason": "pre-registered stage criteria satisfied (not an edge claim)",
+  "events": 48816,
+  "ticker_days": 48816,
+  "means": {
+    "30m": 0.014089156302530652,
+    "60m": 0.018010749992095156,
+    "1m": 0.002922385414599037,
+    "5m": 0.006746693600157203,
+    "15m": 0.010780902022991637
+  },
+  "unsigned_metric": true,
+  "note": "INTERIM until full discovery; SIGNAL_ONLY; not an edge",
+  "recorded_at": "2026-10-02T12:56:42.159589+00:00"
+}

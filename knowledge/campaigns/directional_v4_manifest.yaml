@@ -1,0 +1,88 @@
+campaign_id: directional_campaign_v4
+version: v4
+frozen_at: '2026-10-03T00:00:00Z'
+status: SIGNAL_ONLY
+sealed_oos: inaccessible
+v2_v3: unmodified
+data:
+  source: massive-flat minute bars only
+  root: D:\quant-edge-lab-data
+  panel_start: '2021-10-01'
+  panel_end: '2026-10-01'
+  no_download: [news, trades, quotes, NBBO, L2, L3, fundamentals]
+eligibility:
+  price_prev_close_min: 1.00
+  trailing_20d_median_rth_dollar_volume_min: 1000000
+  warmup_trading_days: 20
+  security_type: COMMON_STOCK
+decision_grid:
+  tz: America/New_York
+  start: '09:40'
+  end: '15:30'
+  step_minutes: 5
+canonical_dtype: datetime[us, UTC]
+feature_store: cross_sectional_v4
+causal_reuse: causal_v2
+beta_window_trading_days: 20
+market_weight: sqrt_trailing_20d_median_dollar_volume
+weight_winsor_q: [0.01, 0.99]
+loo_market: true
+targets:
+  primary: future_residual_15m
+  secondary: [future_residual_5m, future_residual_30m, future_residual_rank_15m, future_raw_15m]
+  diagnostic: future_residual_60m
+  forbidden_for_selection: [future_residual_120m, future_raw_120m]
+splits:
+  method: chronological_unsealed
+  warmup_last_day: '2021-10-28'
+  D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494}
+  D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247}
+  D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494}
+peer_graph:
+  history_trading_days: 20
+  refresh: weekly
+  sensitivity_days: [10, 40]
+  lag_minutes: 5
+  structural_top: 20
+  leaders_top: 5
+  multiple_testing: BH
+  q_edge: 0.10
+search:
+  model: conditional_inference_tree
+  max_depth: 3
+  node_alpha: 0.01
+  quantile_source: D1_only
+  seed: 4
+features_continuous:
+  own_price: [ret_1m, ret_5m, ret_15m, ret_accel_5m, signed_path_eff_5m, close_location_5m,
+    dist_sess_high_volnorm, dist_sess_low_volnorm, gap_market_residual, premarket_residual_return]
+  market: [market_ret_5m, market_ret_15m, beta_20d, resid_ret_5m, resid_ret_15m]
+  cross_section: [resid_rank_5m, resid_rank_change_5m, xs_dispersion_5m, xs_breadth_5m, xs_tail_imbalance]
+  activity: [rvol_5m_tod, rtxn_5m_tod, relative_trade_size_proxy, activity_acceleration,
+    price_impact_proxy, volume_price_disagreement, realized_vol_ratio_15m, range_ratio_15m,
+    missing_minute_rate_15m]
+  time_of_day: [minutes_from_open, same_clock_mean_return, same_clock_surprise]
+  peer: [leader_shock_5m, leader_agreement, leader_response_gap, peer_return_5m,
+    peer_response_gap, peer_rank_gap, peer_breadth, peer_dispersion]
+legacy_flags:
+  primitives: [H004, impulse, high_rvol, quiet_px, mkt_agree]
+  compound: full_state
+  drop_one: [drop_H004, drop_impulse, drop_high_rvol, drop_quiet_px, drop_mkt_agree]
+  note: Flags imported from frozen V2/batch10 thresholds; V2/V3 code not modified.
+search_features:
+  - leader_response_gap
+  - resid_rank_change_5m
+  - resid_ret_5m
+  - xs_dispersion_5m
+  - xs_breadth_5m
+  - rvol_5m_tod
+  - activity_acceleration
+  - volume_price_disagreement
+  - same_clock_surprise
+  - H004
+  - impulse
+  - full_state
+  - drop_H004
+  - drop_impulse
+mechanism_tests: [LL-SPARSE, LL-NETWORK, LL-CATCHUP, LL-RANK-DIFFUSION, LL-STATE-INTERACTION]
+note: SIGNAL_ONLY. Zero survivors is an acceptable scientific result. Do not inspect sealed OOS.

@@ -1,0 +1,62 @@
+# FROZEN 2026-10-02 BEFORE directional campaign v2 market evaluation.
+# Do not edit after launch. Hash is the campaign identity.
+
+version: dir_gates_v2
+primary_horizon: 15m
+returns_are_signed_to_decision: true
+concentration_note: >
+  Stage-1 top-ticker share cap is 0.20 as specified for V2.
+  Rare sequential algorithms still need clustered ticker-days.
+
+stages:
+  fast:
+    min_ticker_days: 25
+    min_trading_days: 8
+    min_abs_mean_15m: 0.0012
+    min_win_rate: null
+    min_frac_days_agree: null
+    min_median_same_sign: false
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.20
+    kill_if_sign_disagrees: true
+    require_outlier_robust: false
+  falsify:
+    min_ticker_days: 40
+    min_trading_days: 12
+    min_abs_mean_15m: 0.0012
+    min_win_rate: 0.48
+    min_frac_days_agree: 0.45
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.20
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0008
+  broad:
+    min_ticker_days: 80
+    min_trading_days: 25
+    min_abs_mean_15m: 0.0015
+    min_win_rate: 0.50
+    min_frac_days_agree: 0.48
+    min_median_same_sign: true
+    require_ci_excludes_zero: false
+    max_top_ticker_share: 0.18
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0008
+  full:
+    min_ticker_days: 200
+    min_trading_days: 80
+    min_abs_mean_15m: 0.0018
+    min_win_rate: 0.51
+    min_frac_days_agree: 0.50
+    min_median_same_sign: true
+    require_ci_excludes_zero: true
+    max_top_ticker_share: 0.15
+    kill_if_sign_disagrees: true
+    require_outlier_robust: true
+    outlier_floor: 0.0010
+
+selective_monotonicity: >
+  For K coverage variants, mean(c05) must be >= mean(all) - 0.0002
+  to PASS the family-level check. Registered before results.

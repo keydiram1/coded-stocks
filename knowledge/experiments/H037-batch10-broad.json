@@ -1,0 +1,44 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-broad",
+  "family_id": "H037",
+  "variant_id": "H037.v1",
+  "stage": "broad",
+  "decision": "KILL",
+  "reason": "sign disagrees with expected_direction=long mean_15m=-0.0007148768667358375",
+  "events": 261829,
+  "ticker_days": 120251,
+  "trading_days": 199,
+  "means": {
+    "1m": -7.366393556252451e-05,
+    "5m": -0.00018424572293526093,
+    "15m": -0.0007148768667358375,
+    "30m": -0.00034969690729241967,
+    "60m": -0.0008637607424802639
+  },
+  "unsigned_metric": false,
+  "expected_direction": "long",
+  "concentration_top_ticker_share": 0.0009397011251465684,
+  "primary_stats": {
+    "horizon": "15m",
+    "n": 120251,
+    "mean": -0.0007148768667358375,
+    "median": 0.0,
+    "std": 0.01940770510894531,
+    "q10": -0.018158236057068677,
+    "q25": -0.007623007623007605,
+    "q50": 0.0,
+    "q75": 0.006217368787525102,
+    "q90": 0.01612740989103112,
+    "win_rate": 0.4492602972116656,
+    "ttest_p": 2.446060695786906e-37,
+    "bootstrap_p": 0.04,
+    "bootstrap_ci_95": [
+      -0.0014164349741918481,
+      -3.704264185972223e-05
+    ],
+    "abs_metric": false
+  },
+  "note": "SIGNAL_ONLY; not an edge; frozen criteria only",
+  "recorded_at": "2026-10-02T13:56:15.291358+00:00"
+}

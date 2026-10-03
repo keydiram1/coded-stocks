@@ -1,0 +1,8 @@
+timezone: America/New_York
+rth_start: "09:30"
+rth_end: "16:00"
+premarket_start: "04:00"
+premarket_end: "09:30"
+sample_seed: 42
+bootstrap_draws: 400
+bootstrap_seed: 42

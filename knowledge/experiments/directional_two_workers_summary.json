@@ -1,0 +1,102 @@
+{
+  "report": "C:\\Users\\IVS\\quant-edge-lab\\reports\\discovery\\directional_two_workers_v1.md",
+  "freeze": {
+    "gates": "a6c14900b745faa860338b23e4502882582a6353cb61a6ce9017ddb285369e07",
+    "batch": "0dd4aff6f44087abae82b90723c8c2bfb9dfd5fd06d0e62e79021dfe7d1c0aa1",
+    "gates_path": "knowledge/families/directional_gates_v1.yaml",
+    "batch_path": "knowledge/families/directional_batch_v1.yaml"
+  },
+  "h004_no_directional_edge": true,
+  "jobs": {
+    "D004.mom5": {
+      "decision": "KILL",
+      "reason": "abs mean 0.00023754973946050245 below economic floor 0.0012",
+      "worker": "A"
+    },
+    "D004.fade5": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.00023754973946050245)",
+      "worker": "A"
+    },
+    "D004.gap": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.00047889728320728314)",
+      "worker": "A"
+    },
+    "D004.gap_fade": {
+      "decision": "KILL",
+      "reason": "abs mean 0.00047889728320728314 below economic floor 0.0012",
+      "worker": "A"
+    },
+    "D004.range": {
+      "decision": "KILL",
+      "reason": "abs mean 0.0003601151581120127 below economic floor 0.0012",
+      "worker": "A"
+    },
+    "D004.select": {
+      "decision": "KILL",
+      "reason": "abs mean 0.00029315493611543946 below economic floor 0.0012",
+      "worker": "A"
+    },
+    "D004.score": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.0004343785304421883)",
+      "worker": "A"
+    },
+    "D101": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.0006643885003646728)",
+      "worker": "B"
+    },
+    "D102": {
+      "decision": "KILL",
+      "reason": "abs mean 0.0006643885003646728 below economic floor 0.0012",
+      "worker": "B"
+    },
+    "D103": {
+      "decision": "KILL",
+      "reason": "abs mean 0.0003234059445815787 below economic floor 0.0012",
+      "worker": "B"
+    },
+    "D105": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.001818775055404686)",
+      "worker": "B"
+    },
+    "D106": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.0005879615774675935)",
+      "worker": "B"
+    },
+    "D107": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.0002585573770059319)",
+      "worker": "B"
+    },
+    "D108": {
+      "decision": "KILL",
+      "reason": "abs mean 0.00030027536110441316 below economic floor 0.0012",
+      "worker": "B"
+    },
+    "D109": {
+      "decision": "KILL",
+      "reason": "abs mean 0.0001588943699579501 below economic floor 0.0012",
+      "worker": "B"
+    },
+    "D111": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.0004174161497071493)",
+      "worker": "B"
+    },
+    "D112": {
+      "decision": "KILL",
+      "reason": "abs mean 0.0006211708472243532 below economic floor 0.0012",
+      "worker": "B"
+    },
+    "D110": {
+      "decision": "KILL",
+      "reason": "sign disagrees (decision-signed mean_15m=-0.00017492175500965283)",
+      "worker": "B"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "type": "stage_result",
+  "batch_id": "batch10-explore-fast",
+  "family_id": "H002",
+  "variant_id": "H002.fade",
+  "stage": "fast",
+  "decision": "KILL",
+  "reason": "sign disagrees with expected_direction=short mean_15m=0.00047973524412717736",
+  "events": 114,
+  "ticker_days": 40,
+  "trading_days": 26,
+  "means": {
+    "1m": -0.00012116279212979458,
+    "5m": -0.000461699256696937,
+    "15m": 0.00047973524412717736,
+    "30m": -0.003857007231742124,
+    "60m": 0.0001250173403264129
+  },
+  "unsigned_metric": false,
+  "expected_direction": "short",
+  "concentration_top_ticker_share": 0.025,
+  "primary_stats": {
+    "horizon": "15m",
+    "n": 40,
+    "mean": 0.00047973524412717736,
+    "median": 0.0001353118939154685,
+    "std": 0.00850067618593975,
+    "q10": -0.004735556194308765,
+    "q25": -0.0006244794977554036,
+    "q50": 0.0001353118939154685,
+    "q75": 0.0018823701243792512,
+    "q90": 0.004362023070097476,
+    "win_rate": 0.5,
+    "ttest_p": 0.7230713051186074,
+    "bootstrap_p": 0.74,
+    "bootstrap_ci_95": [
+      -0.002646328935831829,
+      0.0030769572857220124
+    ],
+    "abs_metric": false
+  },
+  "note": "SIGNAL_ONLY; not an edge; frozen criteria only",
+  "recorded_at": "2026-10-02T16:55:52.129341+00:00"
+}
