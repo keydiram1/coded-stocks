@@ -79,6 +79,16 @@ class CampaignStop(SharedInfrastructureError):
     pass
 
 
+def align_v4_schema(feat: pl.DataFrame, schema: list[str] | None) -> tuple[pl.DataFrame, list[str]]:
+    """Drop later causal_v2 passthrough extras (e.g. V3 resid_5m). Error if frozen cols missing."""
+    if schema is None:
+        return feat, list(feat.columns)
+    missing = [c for c in schema if c not in feat.columns]
+    if missing:
+        raise CampaignStop(f"missing frozen V4 columns {missing[:12]}")
+    return feat.select(schema), schema
+
+
 class Watchdog:
     def __init__(self) -> None:
         self.error_count = 0
@@ -348,6 +358,14 @@ def run_matrix_days(
     rows_total = int(state.get("matrix_rows") or 0)
     done = 0
     t_write = [d for d in days_all if d in write_set]
+    if not state.get("output_schema"):
+        for d0, ck0 in (state.get("days") or {}).items():
+            p0 = v4_day_path(root, d0)
+            if ck0.get("status") == "ok" and p0.exists():
+                state["output_schema"] = list(pl.scan_parquet(p0).collect_schema().names())
+                break
+    if state.get("output_schema") and wd.schema is None:
+        wd.schema = list(state["output_schema"])
     for day in t_write:
         assert_day_in_unsealed(day, man)
         ck = (state.get("days") or {}).get(day) or {}
@@ -387,6 +405,12 @@ def run_matrix_days(
             feat = build_day_matrix(root, day, clock_mean=clock_mean)
             if feat.height == 0 and not warmup:
                 raise CampaignStop(f"empty V4 matrix despite causal_v2 present for {day}")
+            feat, schema = align_v4_schema(feat, state.get("output_schema") or wd.schema)
+            state["output_schema"] = schema
+            wd.schema = schema
+            dest = v4_day_path(root, day)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            feat.write_parquet(dest)
             wd.note_partition(feat, expected_nonempty=not warmup)
             if "minutes_from_open" in feat.columns and "ret_5m" in feat.columns:
                 g = feat.group_by("minutes_from_open").agg(pl.col("ret_5m").mean().alias("m"))

@@ -213,3 +213,15 @@ def test_intraday_must_not_use_future_close_as_available():
     df = with_utc_us(with_utc_us(df, "decision_ts"), "bar_available_at")
     with pytest.raises(AssertionError):
         assert_available_le_decision(df, "bar_available_at", "decision_ts")
+
+
+def test_align_drops_later_causal_passthrough_columns():
+    from quant_edge_lab.discovery.campaign_v4_runner import CampaignStop, align_v4_schema
+
+    frozen = ["instrument_id", "resid_ret_5m"]
+    df = pl.DataFrame({"instrument_id": ["a"], "resid_ret_5m": [0.1], "resid_5m": [0.2], "mkt_rvol_5m": [1.0]})
+    out, schema = align_v4_schema(df, frozen)
+    assert schema == frozen
+    assert out.columns == frozen
+    with pytest.raises(CampaignStop):
+        align_v4_schema(pl.DataFrame({"instrument_id": ["a"]}), frozen)
