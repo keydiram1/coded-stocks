@@ -107,8 +107,10 @@ class Watchdog:
         cols = list(feat.columns)
         if self.schema is None:
             self.schema = cols
-        elif cols != self.schema:
-            raise CampaignStop(f"output schema changed: {len(self.schema)} -> {len(cols)} cols")
+        elif set(cols) != set(self.schema):
+            added = set(cols) - set(self.schema)
+            missing = set(self.schema) - set(cols)
+            raise CampaignStop(f"output schema changed added={sorted(added)[:12]} missing={sorted(missing)[:12]}")
         if "resid_ret_5m" in feat.columns and feat["resid_ret_5m"].null_count() == feat.height:
             raise CampaignStop("resid_ret_5m entirely null")
         if "decision_ts" in feat.columns and str(feat.schema["decision_ts"]) != "Datetime(time_unit='us', time_zone='UTC')":
