@@ -250,13 +250,27 @@ def load_resid_history(root: Path, days: list[str]) -> pl.DataFrame:
 
 
 def apply_graph_to_day(root: Path, day: str, g: PeerGraph) -> None:
+    import gc
+
     p = v4_day_path(root, day)
     feat = pl.read_parquet(p)
     drop = [c for c in ("leader_shock_5m", "leader_agreement", "leader_response_gap", "peer_return_5m", "peer_response_gap", "peer_rank_gap", "peer_breadth", "peer_dispersion") if c in feat.columns]
     if drop:
         feat = feat.drop(drop)
     feat = attach_peer_features(feat, g)
-    feat.write_parquet(p)
+    tmp = p.parent / "part.new.parquet"
+    feat.write_parquet(tmp)
+    del feat
+    gc.collect()
+    for _ in range(8):
+        try:
+            if p.exists():
+                p.unlink()
+            break
+        except OSError:
+            gc.collect()
+            time.sleep(0.25)
+    tmp.replace(p)
 
 
 def scan_search_days(root: Path, days: list[str]) -> pl.DataFrame:
