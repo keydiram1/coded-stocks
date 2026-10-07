@@ -3,7 +3,7 @@
   "freeze": {
     "manifest": "ee59be114e76f3ecd78bd3ad2590e60c94f0754a42096818d9fbf7ee8a7b4a3e",
     "gates": "02ada62546ec70681c7d884f4cb820923e6d1417e21a6d31586fc8c955b8ac38",
-    "git": "UNCOMMITTED"
+    "git": "5be0374ba3cb4608f2d0e9b4f61bb6d26c557952-dirty"
   },
   "splits": {
     "method": "chronological_unsealed",

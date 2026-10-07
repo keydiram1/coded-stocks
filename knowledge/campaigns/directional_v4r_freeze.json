@@ -1,0 +1,97 @@
+{
+  "run_id": "v4r",
+  "timestamp": "2026-10-06T17:00:00Z",
+  "git": "5be0374ba3cb4608f2d0e9b4f61bb6d26c557952-dirty",
+  "working_tree": "dirty-if-git-says",
+  "config_hash": {
+    "manifest": "e20240a286dd07328e0a3ea2f98ad5ffdf5bfd5e82648109e119f5a05cea606f",
+    "gates": "5d9c4add37d806b16157132ee537dc186d06e53de6112bbcc8df372244ec5891",
+    "git": "5be0374ba3cb4608f2d0e9b4f61bb6d26c557952-dirty",
+    "science": "v4r_beta20_fwd15_dayassoc_pathstab_v1"
+  },
+  "feature_list": [
+    "leader_response_gap",
+    "resid_rank_change_5m",
+    "resid_ret_5m",
+    "xs_dispersion_5m",
+    "xs_breadth_5m",
+    "rvol_5m_tod",
+    "activity_acceleration",
+    "volume_price_disagreement",
+    "same_clock_surprise",
+    "H004",
+    "impulse",
+    "full_state",
+    "drop_H004",
+    "drop_impulse"
+  ],
+  "partitions": {
+    "method": "chronological_unsealed",
+    "warmup_last_day": "2021-10-28",
+    "D1": {
+      "start": "2021-10-29",
+      "end": "2023-10-17",
+      "n_days": 494
+    },
+    "D2": {
+      "start": "2023-10-18",
+      "end": "2024-10-10",
+      "n_days": 247
+    },
+    "D3": {
+      "start": "2024-10-11",
+      "end": "2026-10-01",
+      "n_days": 494
+    }
+  },
+  "beta": "ols_20d_null_if_short",
+  "target": "compound_3x5m_minus_beta_t_mkt",
+  "graph": {
+    "history_trading_days": 20,
+    "refresh": "weekly",
+    "sensitivity_days": [
+      10,
+      40
+    ],
+    "lag_minutes": 5,
+    "structural_top": 20,
+    "leaders_top": 5,
+    "multiple_testing": "BH",
+    "q_edge": 0.1,
+    "min_overlap": 40,
+    "require_positive_r": true
+  },
+  "tree": {
+    "max_depth": 3,
+    "node_alpha": 0.01,
+    "quantile_grid": [
+      0.1,
+      0.2,
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9
+    ]
+  },
+  "stability": {
+    "n_subsamples": 100,
+    "subsample_days": 247,
+    "min_path_rediscovery": 0.6,
+    "min_sign_agree": 0.8,
+    "threshold_similarity_q": 0.1,
+    "min_selection_freq": 0.6
+  },
+  "d3": {
+    "require_sign_match_d2": true,
+    "abs_mean_floor": 0.0012
+  },
+  "seed": 4,
+  "science": "v4r_beta20_fwd15_dayassoc_pathstab_v1",
+  "python": "3.12.10",
+  "numpy": "2.5.3",
+  "polars": "1.44.2",
+  "scipy": "1.18.1"
+}

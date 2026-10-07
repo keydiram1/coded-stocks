@@ -418,6 +418,29 @@ def discovery_campaign_v3(
     console.print("SIGNAL_ONLY. Campaign exhausted. No sealed OOS. No orders.")
 
 
+@disc_app.command("campaign-v4r")
+def discovery_campaign_v4r(
+    execute: bool = typer.Option(False, "--execute", help="Full V4R after tests/preflight GO."),
+    smoke: bool = typer.Option(False, "--smoke", help="Tiny synthetic/real slice only."),
+) -> None:
+    """V4R repaired discovery. Does not overwrite V4. No sealed OOS."""
+    from quant_edge_lab.discovery.v4r.runner import freeze_v4r, load_v4r, run_campaign_v4r
+
+    root = Path.cwd()
+    fr = freeze_v4r(root)
+    man, gates = load_v4r(root)
+    console.print(f"FROZEN v4r manifest={fr['manifest']} gates={fr['gates']} git={fr['git']} science={fr['science']}")
+    console.print(f"SEARCH_FEATURES={man['search_features']}")
+    console.print(f"D1 {man['splits']['D1']} D2 {man['splits']['D2']} D3 {man['splits']['D3']}")
+    console.print("SIGNAL_ONLY. Sealed OOS inaccessible. Zero survivors is acceptable. NO V4R2.")
+    if not execute and not smoke:
+        console.print("STOP after freeze print. Full run: campaign-v4r --execute")
+        raise typer.Exit(code=0)
+    state = run_campaign_v4r(root, smoke_days=["synthetic"] if smoke else None)
+    console.print(f"report={state.get('report')} RESEARCH_PASS={state.get('RESEARCH_PASS')}")
+    console.print("SIGNAL_ONLY. Sealed OOS not opened.")
+
+
 @disc_app.command("campaign-v4")
 def discovery_campaign_v4(
     execute: bool = typer.Option(False, "--execute", help="Do not use until freeze is accepted. Full matrix/D1–D3."),

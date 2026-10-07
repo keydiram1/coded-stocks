@@ -36,6 +36,10 @@ class SharedInfrastructureError(RuntimeError):
     pass
 
 
+class CampaignStop(SharedInfrastructureError):
+    pass
+
+
 def freeze_campaign(root: Path) -> dict[str, str]:
     return {
         "manifest": sha256_file(root / MANIFEST_REL),
@@ -89,6 +93,16 @@ def v4_store(root: Path) -> Path:
 
 def v4_day_path(root: Path, day: str) -> Path:
     return v4_store(root) / f"date={day}" / "part.parquet"
+
+
+def v4_peer_store(root: Path) -> Path:
+    p = Paths(root).features / "cross_sectional_v4_peers"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def v4_peer_day_path(root: Path, day: str) -> Path:
+    return v4_peer_store(root) / f"date={day}" / "part.parquet"
 
 
 def build_day_matrix(root: Path, day: str, *, graph=None, clock_mean: dict[int, float] | None = None) -> pl.DataFrame:

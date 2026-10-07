@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import traceback
 from collections import defaultdict, deque
@@ -21,7 +22,7 @@ from quant_edge_lab.discovery.campaign_v4 import (
     BATCH_ID,
     GATES_REL,
     MANIFEST_REL,
-    SharedInfrastructureError,
+    CampaignStop,
     build_day_matrix,
     freeze_campaign,
     load_v4,
@@ -29,6 +30,7 @@ from quant_edge_lab.discovery.campaign_v4 import (
     run_pipeline_on_frame,
     split_frame,
     v4_day_path,
+    v4_peer_day_path,
     v4_store,
 )
 from quant_edge_lab.discovery.conditional.association import spearman_dayblock
@@ -37,7 +39,7 @@ from quant_edge_lab.discovery.knowledge import append_jsonl, atomic_write_json, 
 from quant_edge_lab.discovery.runner import _batch_dir, load_state, save_state
 from quant_edge_lab.features.causal_store import compute_day_features, day_path
 from quant_edge_lab.hashing import git_sha, sha256_file, sha256_json
-from quant_edge_lab.peers import PeerGraph, PeerGraphBuilder, attach_peer_features
+from quant_edge_lab.peers import GRAPH_FEATURE_COLS, GRAPH_IMPL_VERSION, PeerGraph, PeerGraphBuilder, attach_peer_features, graph_to_record, record_to_graph
 from quant_edge_lab.universe.filters import add_session_columns
 
 console = Console()
@@ -73,10 +75,6 @@ SEARCH_COLS = [
     "peer_response_gap",
     "peer_rank_gap",
 ]
-
-
-class CampaignStop(SharedInfrastructureError):
-    pass
 
 
 def align_v4_schema(feat: pl.DataFrame, schema: list[str] | None) -> tuple[pl.DataFrame, list[str]]:
@@ -249,31 +247,44 @@ def load_resid_history(root: Path, days: list[str]) -> pl.DataFrame:
     return pl.concat(frames, how="diagonal_relaxed") if frames else pl.DataFrame()
 
 
-def apply_graph_to_day(root: Path, day: str, g: PeerGraph) -> None:
+def apply_graph_to_day(root: Path, day: str, g: PeerGraph, *, identity: dict[str, Any]) -> dict[str, Any]:
+    """Write graph-feature overlay; do not rewrite immutable Stage-1 partitions."""
     import gc
 
     p = v4_day_path(root, day)
+    dest = v4_peer_day_path(root, day)
     feat = pl.read_parquet(p)
-    drop = [c for c in ("leader_shock_5m", "leader_agreement", "leader_response_gap", "peer_return_5m", "peer_response_gap", "peer_rank_gap", "peer_breadth", "peer_dispersion") if c in feat.columns]
+    drop = [c for c in GRAPH_FEATURE_COLS if c in feat.columns]
     if drop:
         feat = feat.drop(drop)
     feat = attach_peer_features(feat, g)
-    tmp = p.parent / "part.new.parquet"
-    feat.write_parquet(tmp)
-    del feat
+    if g.edges and "leader_response_gap" in feat.columns and "resid_ret_5m" in feat.columns and "graph_available" in feat.columns:
+        sub = feat.filter(pl.col("graph_available") == True)  # noqa: E712
+        if sub.height > 50:
+            dmed = float((sub["leader_response_gap"] + sub["resid_ret_5m"]).abs().median() or 1.0)
+            if dmed < 1e-12:
+                raise CampaignStop(f"{day}: leader_response_gap aliases -resid despite graph edges")
+            nunq = int(sub["leader_shock_5m"].n_unique()) if "leader_shock_5m" in sub.columns else 0
+            if nunq <= 1:
+                raise CampaignStop(f"{day}: graph edges exist but leader_shock_5m is constant")
+    keys = [c for c in ("trading_date", "instrument_id", "decision_ts") if c in feat.columns]
+    cols = keys + [c for c in GRAPH_FEATURE_COLS if c in feat.columns]
+    ov = feat.select(cols)
+    n_avail = int(ov["graph_available"].sum()) if "graph_available" in ov.columns else 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.parent / "part.new.parquet"
+    ov.write_parquet(tmp)
+    del feat, ov
     gc.collect()
-    for _ in range(8):
-        try:
-            if p.exists():
-                p.unlink()
-            break
-        except OSError:
-            gc.collect()
-            time.sleep(0.25)
-    tmp.replace(p)
+    tmp.replace(dest)
+    rec = {"day": day, "graph_available_rows": n_avail, "graph_impl": GRAPH_IMPL_VERSION, "as_of": g.as_of, "identity": identity, "n_edges": len(g.edges)}
+    atomic_write_json(dest.parent / "ckpt.json", rec)
+    return rec
 
 
 def scan_search_days(root: Path, days: list[str]) -> pl.DataFrame:
+    if len(days) > 40 and os.environ.get("QUANT_EDGE_V4_ALLOW_EAGER") != "1":
+        raise CampaignStop("eager scan_search_days blocked for large day lists; use streaming search")
     files = [v4_day_path(root, d) for d in days if v4_day_path(root, d).exists()]
     if not files:
         return pl.DataFrame()
@@ -324,7 +335,15 @@ def write_v4_report(root: Path, state: dict) -> Path:
         f"- NOT EVALUATED: {c.get('NOT_EVALUATED', 0)}",
         f"- stop_reason: {state.get('stop_reason') or 'completed'}",
         "",
-        "Zero survivors is a valid scientific result under frozen gates.",
+        "If NOT EVALUATED > 0, D1–D3 did not run. That is not a zero-survivor scientific result.",
+        "",
+        "Zero survivors after a completed D3 pass is a valid scientific result under frozen gates.",
+        "",
+        "## Attempt lineage",
+        "",
+        "Attempt 1: PARTIAL INVALIDATION — NaN structural-peer argsort produced n_tests=0 and empty graphs; leader_response_gap aliased -resid_ret_5m. Graph-dependent mechanisms were NOT EVALUATED.",
+        "",
+        "Attempt 2: same frozen YAML hashes; finite pairwise top-K; null empty-graph semantics; Stage-1 matrix reused; graph overlay store `cross_sectional_v4_peers`.",
         "",
         "## Freeze / execution lineage",
         "",
@@ -457,7 +476,23 @@ def run_matrix_days(
     save_state(root, state)
 
 
+def _graph_record_ok(rec: dict[str, Any], *, cfg_hash: str) -> bool:
+    if rec.get("graph_impl") != GRAPH_IMPL_VERSION:
+        return False
+    if rec.get("cfg_hash") not in {None, cfg_hash} and rec.get("cfg_hash") != cfg_hash:
+        return False
+    lin = rec.get("lineage") or {}
+    if rec.get("history_end") and rec.get("as_of") and str(rec["history_end"]) >= str(rec["as_of"]):
+        return False
+    if lin.get("n_tests") is None:
+        return False
+    return True
+
+
 def run_peer_graphs(root: Path, man: dict, days: list[str], state: dict, wd: Watchdog, cfg_hash: str) -> None:
+    from quant_edge_lab.discovery.v4_search import peak_rss
+    from quant_edge_lab.discovery.v4_status import graph_status, maybe_status
+
     t0 = time.time()
     pg = man["peer_graph"]
     builder = PeerGraphBuilder(
@@ -469,54 +504,109 @@ def run_peer_graphs(root: Path, man: dict, days: list[str], state: dict, wd: Wat
     )
     weeks = sorted({_week_monday(d) for d in days if d >= man["splits"]["D1"]["start"]})
     gdir = graph_dir(root)
+    identity = {
+        "cfg_hash": cfg_hash,
+        "graph_impl": GRAPH_IMPL_VERSION,
+        "manifest": state.get("lineage", {}).get("manifest"),
+        "gates": state.get("lineage", {}).get("gates"),
+    }
+    state["graph_impl"] = GRAPH_IMPL_VERSION
+    edge_hist: list[int] = []
+    zeros = 0
+    consec_zero_tests = 0
     n_edges = 0
     for i, as_of in enumerate(weeks):
         assert_day_in_unsealed(as_of, man)
         gp = gdir / f"as_of={as_of}" / "graph.json"
-        if gp.exists() and (state.get("graphs") or {}).get(as_of, {}).get("cfg_hash") == cfg_hash:
-            continue
-        hist_days = [d for d in days if d < as_of][-int(pg["history_trading_days"]) :]
-        hist = load_resid_history(root, hist_days)
-        if hist.height:
-            mx = hist["trading_date"].max()
-            if str(mx) >= as_of:
-                raise CampaignStop(f"graph {as_of} history_end {mx} not strictly before as_of")
-        hist = hist.with_columns(pl.col("decision_ts").cast(pl.Utf8).alias("clock"))
-        g = builder.fit(hist, as_of=as_of)
-        if g.history_end and g.history_end >= as_of:
-            raise CampaignStop(f"PIT fail graph history_end={g.history_end} as_of={as_of}")
-        rec = {
-            "as_of": as_of,
-            "history_start": g.history_start,
-            "history_end": g.history_end,
-            "n_edges": len(g.edges),
-            "lineage": g.lineage,
-            "cfg_hash": cfg_hash,
-            "edges": [
-                {
-                    "leader_id": e.leader_id,
-                    "follower_id": e.follower_id,
-                    "weight": e.weight,
-                    "lag_minutes": e.lag_minutes,
-                    "p_value": e.p_value,
-                    "q_value": e.q_value,
-                }
-                for e in g.edges
-            ],
-        }
-        gp.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(gp, rec)
+        skip = False
+        if gp.exists():
+            rec0 = json.loads(gp.read_text(encoding="utf-8"))
+            if _graph_record_ok(rec0, cfg_hash=cfg_hash):
+                g = record_to_graph(rec0)
+                skip = True
+            else:
+                g = None
+        else:
+            g = None
+        if not skip:
+            hist_days = [d for d in days if d < as_of][-int(pg["history_trading_days"]) :]
+            hist = load_resid_history(root, hist_days)
+            if hist.height:
+                mx = hist["trading_date"].max()
+                if str(mx) >= as_of:
+                    raise CampaignStop(f"graph {as_of} history_end {mx} not strictly before as_of")
+            hist = hist.with_columns(pl.col("decision_ts").cast(pl.Utf8).alias("clock"))
+            g = builder.fit(hist, as_of=as_of)
+            if g.history_end and g.history_end >= as_of:
+                raise CampaignStop(f"PIT fail graph history_end={g.history_end} as_of={as_of}")
+            lin = g.lineage or {}
+            n_usable = int(lin.get("n_usable_names") or 0)
+            n_tests = int(lin.get("n_tests") or 0)
+            if n_usable >= 50 and n_tests == 0:
+                raise CampaignStop(f"graph {as_of}: n_tests=0 with n_usable_names={n_usable} (structural selector failure)")
+            for e in g.edges:
+                if not (np.isfinite(e.weight) and np.isfinite(e.p_value) and np.isfinite(e.q_value)):
+                    raise CampaignStop(f"graph {as_of}: non-finite edge statistic")
+            rec = graph_to_record(g, cfg_hash=cfg_hash)
+            gp.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(gp, rec)
+        assert g is not None
+        lin = g.lineage or {}
+        n_tests = int(lin.get("n_tests") or 0)
+        if n_tests == 0:
+            consec_zero_tests += 1
+        else:
+            consec_zero_tests = 0
+        if consec_zero_tests >= 3:
+            raise CampaignStop(f"three consecutive graphs with n_tests=0 ending at {as_of}")
         use_days = [d for d in days if _week_monday(d) == as_of and v4_day_path(root, d).exists()]
         for d in use_days:
-            apply_graph_to_day(root, d, g)
-        n_edges += len(g.edges)
-        state.setdefault("graphs", {})[as_of] = {"n_edges": len(g.edges), "n_tests": g.lineage.get("n_tests"), "cfg_hash": cfg_hash, "history_end": g.history_end}
+            ck = v4_peer_day_path(root, d).parent / "ckpt.json"
+            if ck.exists():
+                prev = json.loads(ck.read_text(encoding="utf-8"))
+                if prev.get("graph_impl") == GRAPH_IMPL_VERSION and prev.get("as_of") == as_of and prev.get("identity") == identity:
+                    continue
+            apply_graph_to_day(root, d, g, identity=identity)
+        n_e = len(g.edges)
+        n_edges += n_e
+        edge_hist.append(n_e)
+        if n_e == 0:
+            zeros += 1
+        state.setdefault("graphs", {})[as_of] = {
+            "n_edges": n_e,
+            "n_tests": n_tests,
+            "n_bh_survivors": lin.get("n_bh_survivors"),
+            "n_names": lin.get("n_names"),
+            "structural_pairs_considered": lin.get("structural_pairs_considered"),
+            "cfg_hash": cfg_hash,
+            "graph_impl": GRAPH_IMPL_VERSION,
+            "history_end": g.history_end,
+        }
+        maybe_status(
+            "graph",
+            graph_status(done=i + 1, total=len(weeks), as_of=as_of, lin=lin, edge_hist=edge_hist, peak_rss_gb=peak_rss() / 1e9, t0=t0, zeros=zeros),
+            force=(i + 1) in {1, 3, 10} or (i + 1) == len(weeks),
+        )
+        if (i + 1) in {1, 3, 10}:
+            _graph_sanity(state, i + 1, g, as_of)
         if i % 1 == 0:
             _progress("STAGE 2 PEER GRAPH", i + 1, len(weeks), t0, n_edges, wd)
-        if i % 3 == 0:
-            save_state(root, state)
+        save_state(root, state)
     state["n_graph_versions"] = len(weeks)
+    state["graph_impl"] = GRAPH_IMPL_VERSION
     save_state(root, state)
+
+
+def _graph_sanity(state: dict, n: int, g: PeerGraph, as_of: str) -> None:
+    edges = list((state.get("graphs") or {}).values())
+    tests = [int(e.get("n_tests") or 0) for e in edges]
+    n_edges = [int(e.get("n_edges") or 0) for e in edges]
+    console.print(f"SANITY {n} graphs as_of={as_of} n_tests={g.lineage.get('n_tests')} n_edges={len(g.edges)} tests_min={min(tests) if tests else None} edges_max={max(n_edges) if n_edges else None}")
+    if n >= 1 and int(g.lineage.get("n_usable_names") or 0) >= 50 and int(g.lineage.get("n_tests") or 0) == 0:
+        raise CampaignStop("sanity: n_tests=0 with usable names")
+    if g.edges:
+        sample = g.edges[:5]
+        console.print("example_edges " + "; ".join(f"{e.leader_id}->{e.follower_id} r={e.weight:.4f} q={e.q_value:.3g}" for e in sample))
 
 
 def run_campaign_v4(root: Path) -> dict[str, Any]:
@@ -552,6 +642,9 @@ def run_campaign_v4(root: Path) -> dict[str, Any]:
         "working_tree": git_sha(root),
         "status": "SIGNAL_ONLY",
         "sealed_oos": "not_opened",
+        "attempt_1": "PARTIAL INVALIDATION — graph-dependent information unavailable due to NaN structural-peer selection bug.",
+        "attempt_2": "finite pairwise structural top-K; null empty-graph features; overlay store; same frozen YAML hashes",
+        "graph_impl": GRAPH_IMPL_VERSION,
     }
     wd = Watchdog()
     save_state(root, state)
@@ -570,38 +663,77 @@ def run_campaign_v4(root: Path) -> dict[str, Any]:
     ]
     t_all = time.time()
     try:
-        for name, subset in phases:
-            state["stage"] = f"matrix_{name}"
-            console.print(f"PHASE {name} matrix days={len(subset)}")
-            t1 = time.time()
-            run_matrix_days(root, man, days, subset, state, wd, instruments=instruments, cfg_hash=cfg_hash)
-            state.setdefault("perf", {})[name] = {"seconds": time.time() - t1, "days": len(subset), "rows": state.get("matrix_rows")}
-            save_state(root, state)
-            if name in {"A", "B"} and subset:
-                sample = pl.read_parquet(v4_day_path(root, subset[0]))
-                inspect = sample.sample(n=min(20, sample.height), seed=4) if sample.height else sample
-                keep = [c for c in inspect.columns if not str(c).startswith("future_")]
-                atomic_write_json(_batch_dir(root, BATCH_ID) / f"inspect_{name}.json", {"day": subset[0], "rows": inspect.select(keep).to_dicts()[:20]})
-        state["stage"] = "graphs"
-        run_peer_graphs(root, man, days, state, wd, cfg_hash)
+        ok_n = sum(1 for v in (state.get("days") or {}).values() if (v or {}).get("status") in {"ok", "ok_warmup"})
+        matrix_complete = ok_n >= len(days)
+        n_weeks = len({_week_monday(d) for d in days if d >= man["splits"]["D1"]["start"]})
+        valid_g = sum(
+            1
+            for rec in (state.get("graphs") or {}).values()
+            if (rec or {}).get("graph_impl") == GRAPH_IMPL_VERSION and (rec or {}).get("n_tests") is not None
+        )
+        graphs_complete = valid_g >= n_weeks
+        if not matrix_complete:
+            for name, subset in phases:
+                state["stage"] = f"matrix_{name}"
+                console.print(f"PHASE {name} matrix days={len(subset)}")
+                t1 = time.time()
+                run_matrix_days(root, man, days, subset, state, wd, instruments=instruments, cfg_hash=cfg_hash)
+                state.setdefault("perf", {})[name] = {"seconds": time.time() - t1, "days": len(subset), "rows": state.get("matrix_rows")}
+                save_state(root, state)
+                if name in {"A", "B"} and subset:
+                    sample = pl.read_parquet(v4_day_path(root, subset[0]))
+                    inspect = sample.sample(n=min(20, sample.height), seed=4) if sample.height else sample
+                    keep = [c for c in inspect.columns if not str(c).startswith("future_")]
+                    atomic_write_json(_batch_dir(root, BATCH_ID) / f"inspect_{name}.json", {"day": subset[0], "rows": inspect.select(keep).to_dicts()[:20]})
+        else:
+            console.print(f"STAGE 1 complete ({ok_n} days); not rebuilding matrix")
+        if not graphs_complete:
+            state["stage"] = "graphs_v2"
+            run_peer_graphs(root, man, days, state, wd, cfg_hash)
+        else:
+            console.print(f"STAGE 2 complete ({valid_g} graphs impl={GRAPH_IMPL_VERSION}); not rebuilding graphs")
 
         d2_days = [d for d in days if man["splits"]["D2"]["start"] <= d <= man["splits"]["D2"]["end"]]
         d3_days = [d for d in days if man["splits"]["D3"]["start"] <= d <= man["splits"]["D3"]["end"]]
+        from quant_edge_lab.discovery.v4_search import preflight_streaming, run_pipeline_streaming
+
+        missing_ov = [d for d in days if v4_day_path(root, d).exists() and d >= man["splits"]["D1"]["start"] and not v4_peer_day_path(root, d).exists()]
+        if missing_ov:
+            raise CampaignStop(f"graph overlay missing for {len(missing_ov)} days e.g. {missing_ov[:3]}")
+        ident = {"cfg_hash": cfg_hash, "graph_impl": GRAPH_IMPL_VERSION, "manifest": fr["manifest"], "gates": fr["gates"]}
+        state["stage"] = "D1_preflight"
+        try:
+            pf = preflight_streaming(root, man, gates, d1_days)
+        except Exception as exc:
+            raise CampaignStop(f"D1 preflight exception: {type(exc).__name__}: {exc}") from exc
+        state["d1_preflight"] = pf
+        save_state(root, state)
+        if not pf.get("pass"):
+            raise CampaignStop(f"D1 preflight failed: {pf}")
         state["stage"] = "D1"
-        console.print("D1 loading search frame (SIGNAL_ONLY)")
-        d1 = scan_search_days(root, d1_days)
-        d2 = scan_search_days(root, d2_days)
-        d3 = scan_search_days(root, d3_days)
-        frame = pl.concat([d1, d2, d3], how="diagonal_relaxed") if d1.height else pl.DataFrame()
+        console.print("D1 streaming search (SIGNAL_ONLY); graph-enabled attempt 2")
+        n1 = int(pf.get("n_d1_full") or 0)
+        pipe = run_pipeline_streaming(
+            root,
+            man,
+            gates,
+            d1_days,
+            d2_days,
+            d3_days,
+            features=list(man["search_features"]),
+            ckpt_dir=_batch_dir(root, BATCH_ID) / "search_v2",
+            identity=ident,
+        )
         state["counts"] = {
             "matrix_rows": int(state.get("matrix_rows") or 0),
-            "d1_rows": d1.height,
-            "d2_rows": d2.height,
-            "d3_rows": d3.height,
+            "d1_rows": pipe.get("n_d1"),
+            "d2_rows": pipe.get("n_d2"),
+            "d3_rows": pipe.get("n_d3_rows"),
             "graph_versions": int(state.get("n_graph_versions") or 0),
             "graph_edges": int(sum((g or {}).get("n_edges") or 0 for g in (state.get("graphs") or {}).values())),
+            "peak_rss_bytes": pipe.get("peak_rss_bytes"),
         }
-        if d1.height == 0:
+        if not pipe.get("n_d1"):
             state["pipeline"] = {"n_candidates": 0, "survivors": [], "note": "zero D1 rows"}
             state["mechanisms"] = {"status": "NOT EVALUATED"}
             state["counts"]["NOT_EVALUATED"] = 1
@@ -609,8 +741,7 @@ def run_campaign_v4(root: Path) -> dict[str, Any]:
             state["counts"]["ERROR"] = wd.error_count
             state["counts"]["RESEARCH_PASS"] = 0
         else:
-            state["mechanisms"] = mechanism_tests(d1)
-            pipe = run_pipeline_on_frame(frame, man, gates, features=list(man["search_features"]))
+            state["mechanisms"] = pipe.get("mechanisms") or {}
             state["pipeline"] = {k: v for k, v in pipe.items() if k != "search_lineage"}
             lineage_path = _batch_dir(root, BATCH_ID) / "search_lineage.jsonl"
             if lineage_path.exists():
@@ -651,4 +782,14 @@ def run_campaign_v4(root: Path) -> dict[str, Any]:
         state["report"] = str(report)
         save_state(root, state)
         console.print(f"STOPPED stage={state.get('stage')} {exc}")
+        raise
+    except Exception as exc:
+        state["stage"] = f"STOPPED:{state.get('stage')}"
+        state["stop_reason"] = f"{type(exc).__name__}: {exc}"
+        state["counts"] = dict(state.get("counts") or {})
+        state["counts"]["ERROR"] = wd.error_count or 1
+        report = write_v4_report(root, state)
+        state["report"] = str(report)
+        save_state(root, state)
+        console.print(f"STOPPED uncaught {type(exc).__name__}: {exc}")
         raise

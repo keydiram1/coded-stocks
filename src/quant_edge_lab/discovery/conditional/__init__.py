@@ -64,18 +64,27 @@ def make_candidate(
 def apply_conditions(df: pl.DataFrame, conditions: tuple[Condition, ...]) -> pl.DataFrame:
     out = df
     for c in conditions:
-        col = pl.col(c.feature)
-        if c.operator == ">":
-            out = out.filter(col > c.threshold)
-        elif c.operator == ">=":
-            out = out.filter(col >= c.threshold)
-        elif c.operator == "<":
-            out = out.filter(col < c.threshold)
-        elif c.operator == "<=":
-            out = out.filter(col <= c.threshold)
-        else:
-            out = out.filter(col == c.threshold)
+        out = out.filter(_cond_expr(c))
     return out
+
+
+def apply_conditions_lf(lf: pl.LazyFrame, conditions: tuple[Condition, ...] | list[Condition]) -> pl.LazyFrame:
+    for c in conditions:
+        lf = lf.filter(_cond_expr(c))
+    return lf
+
+
+def _cond_expr(c: Condition) -> pl.Expr:
+    col = pl.col(c.feature)
+    if c.operator == ">":
+        return col > c.threshold
+    if c.operator == ">=":
+        return col >= c.threshold
+    if c.operator == "<":
+        return col < c.threshold
+    if c.operator == "<=":
+        return col <= c.threshold
+    return col == c.threshold
 
 
 def signed_target(df: pl.DataFrame, target: str, direction: str) -> pl.Series:

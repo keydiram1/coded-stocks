@@ -1,0 +1,81 @@
+campaign_id: directional_campaign_v4r
+version: v4r
+parent: directional_campaign_v4
+frozen_at: '2026-10-06T00:00:00Z'
+status: SIGNAL_ONLY
+sealed_oos: inaccessible
+v2_v3: unmodified
+v4_artifacts: untouched
+data:
+  source: massive-flat minute bars only
+  root: D:\quant-edge-lab-data
+  panel_start: '2021-10-01'
+  panel_end: '2026-10-01'
+  no_download: [news, trades, quotes, NBBO, L2, L3, fundamentals]
+eligibility:
+  price_prev_close_min: 1.00
+  trailing_20d_median_rth_dollar_volume_min: 1000000
+  warmup_trading_days: 20
+  security_type: COMMON_STOCK
+decision_grid:
+  tz: America/New_York
+  start: '09:40'
+  end: '15:30'
+  step_minutes: 5
+canonical_dtype: datetime[us, UTC]
+feature_store: cross_sectional_v4r
+peer_store: cross_sectional_v4r_peers
+graph_store: peer_graph_v4r
+daily_store: v4r_daily
+causal_reuse: causal_v2
+beta_window_trading_days: 20
+beta_estimator: ols_covariance_with_intercept_form
+beta_insufficient: null
+market_weight: sqrt_trailing_20d_median_dollar_volume
+weight_winsor_q: [0.01, 0.99]
+loo_market: true
+targets:
+  primary: future_residual_15m
+  primary_definition: compounded_three_5m_stock_minus_beta_t_times_compounded_three_5m_loo_market
+  secondary: [future_raw_15m, future_residual_5m, future_residual_30m]
+  forbidden_for_selection: [future_residual_120m, future_raw_120m]
+splits:
+  method: chronological_unsealed
+  warmup_last_day: '2021-10-28'
+  D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494}
+  D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247}
+  D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494}
+peer_graph:
+  history_trading_days: 20
+  refresh: weekly
+  sensitivity_days: [10, 40]
+  lag_minutes: 5
+  structural_top: 20
+  leaders_top: 5
+  multiple_testing: BH
+  q_edge: 0.10
+  min_overlap: 40
+  require_positive_r: true
+search:
+  model: conditional_inference_tree
+  max_depth: 3
+  node_alpha: 0.01
+  quantile_source: fold_local_for_stability
+  seed: 4
+  association_unit: trading_day
+search_features:
+  - leader_response_gap
+  - resid_rank_change_5m
+  - resid_ret_5m
+  - xs_dispersion_5m
+  - xs_breadth_5m
+  - rvol_5m_tod
+  - activity_acceleration
+  - volume_price_disagreement
+  - same_clock_surprise
+  - H004
+  - impulse
+  - full_state
+  - drop_H004
+  - drop_impulse
+note: SIGNAL_ONLY. V4R repairs beta=1 fallback, shift(-3) target, row-level association, feature-only stability, fold-global quantiles, unused min_sign_agree. Do not inspect sealed OOS.

@@ -1,0 +1,40 @@
+# V4R gates. Repair enforcement, not a rescue of V4 near-misses. SIGNAL_ONLY.
+version: dir_gates_v4r
+campaign: directional_campaign_v4r
+primary_target: future_residual_15m
+primary_horizon_minutes: 15
+economic_floor_abs_mean: 0.0012
+max_top_ticker_share: 0.50
+min_win_rate: 0.48
+leaf:
+  min_ticker_days: 750
+  min_trading_days: 100
+  min_tickers: 75
+  min_parent_frac: 0.15
+tree:
+  max_depth: 3
+  node_alpha: 0.01
+  quantile_grid: [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+stability:
+  n_subsamples: 100
+  subsample_days: 247
+  min_path_rediscovery: 0.60
+  min_sign_agree: 0.80
+  threshold_similarity_q: 0.10
+  min_selection_freq: 0.60
+threshold_neighbors:
+  min_sign_agree: true
+  min_effect_frac: 0.50
+parsimony:
+  within_one_se: true
+  prefer_fewer_conditions: true
+d3:
+  require_sign_match_d2: true
+  abs_mean_floor: 0.0012
+linear:
+  family: ridge
+  lambda_grid: [0.001, 0.01, 0.1]
+  pick_on: D1_mse
+  scaler: train_only
+status: SIGNAL_ONLY
+note: RESEARCH PASS is not tradable. Subthreshold robust effects are VALIDATED_SUBTHRESHOLD_PHENOMENON not PASS. No sealed OOS.
