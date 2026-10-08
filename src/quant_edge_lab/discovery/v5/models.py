@@ -56,7 +56,7 @@ class CandidateRule(BaseModel):
     dislocation_abs_min: float | None = None
     rvol_min: float | None = None
     require_rvol: bool = True
-    direction_policy: Literal["reversal_no_flip"] = "reversal_no_flip"
+    direction_policy: Literal["reversal_no_flip", "continuation_no_flip"] = "reversal_no_flip"
     primary_outcome: str
     frozen_from_split: str = "D1"
     frozen: bool = False

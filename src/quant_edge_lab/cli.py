@@ -465,6 +465,52 @@ def discovery_campaign_v5(
     console.print("SIGNAL_ONLY. Sealed OOS not opened.")
 
 
+@disc_app.command("campaign-v5-continuation")
+def discovery_campaign_v5_continuation(
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Forbidden until independent review. Default is readiness-only.",
+    ),
+) -> None:
+    """Continuation confirmation campaign. Default prints readiness and does not load D3."""
+    from quant_edge_lab.discovery.v5.continuation_runner import run_campaign_v5_continuation
+
+    root = Path.cwd()
+    if execute:
+        try:
+            state = run_campaign_v5_continuation(root, execute=True)
+        except RuntimeError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+        console.print(json.dumps({k: state[k] for k in state if k != "rules"}, default=str)[:4000])
+        console.print("SIGNAL_ONLY. Sealed OOS not opened. D1/D2 were not confirmation.")
+        return
+    state = run_campaign_v5_continuation(root, execute=False)
+    console.print(
+        "READINESS continuation "
+        f"campaign_id={state['campaign_id']} science_id={state['science_id']}"
+    )
+    console.print(f"source_campaign={state['source_campaign']}")
+    console.print(
+        f"manifest={state['manifest_hash']} gates={state['gates_hash']} git={state['git']}"
+    )
+    console.print(f"data_manifest={state['data_manifest_hash']}")
+    console.print(
+        f"primary_outcome={state['primary_outcome']} trial_count={state['trial_count']}"
+    )
+    console.print(
+        f"evaluable_split={state['evaluable_split']} "
+        f"economic_floor_bp={state['economic_floor_bp']}"
+    )
+    console.print(f"sealed_oos={state['sealed_oos']}")
+    console.print(f"execution_status={state['execution_status']}")
+    console.print(f"h1_role={state['h1_role']}")
+    console.print(f"launch={state['launch_command']}")
+    console.print("SIGNAL_ONLY. STOP. Default does not load D3 or run confirmation.")
+    raise typer.Exit(code=0)
+
+
 @disc_app.command("v5-status")
 def discovery_v5_status(run_id: str | None = typer.Option(None, help="Optional run id. Never starts research.")) -> None:
     """Read-only V5 checkpoint/status. Does not mutate artifacts."""

@@ -1,0 +1,92 @@
+campaign_id: v5_close_dislocation_continuation
+version: v5_continuation
+science_id: v5_close_dislocation_continuation_confirmation_v1
+status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+parent_campaign: CLOSE_DISLOCATION_REVERSAL_V1
+parent_campaigns:
+  - CLOSE_DISLOCATION_REVERSAL_V1
+v4_v4r: closed_untouched
+reversal_campaign: CLOSED_IMMUTABLE
+note: >
+  CLOSE_DISLOCATION_CONTINUATION_V1 is a NEW confirmation campaign.
+  It is not a modification, rescue, or reinterpretation of
+  CLOSE_DISLOCATION_REVERSAL_V1. Continuation was formulated only after
+  reversal failed in D1 and D2. D1/D2 are discovery evidence for this new
+  question, not confirmation. D3 (2024-10-11 through 2026-10-01, 494 days)
+  is the sole untouched historical confirmation split. Thresholds are
+  inherited unchanged from the original D1 freeze. H1 remains PRIMARY
+  despite H2 having larger discovery magnitude. SIGNAL_ONLY. instruments.parquet
+  is not session-dated listing history. Any survivor still requires execution
+  modeling and proper PIT listing replication before trading-grade evidence.
+  Sealed OOS stays closed. No fourth historical OOS exists.
+
+data:
+  source: reuse immutable event partitions from source run v5-close-dislocation
+  panel_start: '2021-10-01'
+  panel_end: '2026-10-01'
+  no_event_reconstruction: true
+
+source_run:
+  run_id: v5-close-dislocation
+  campaign_id: CLOSE_DISLOCATION_REVERSAL_V1
+  git: 47e8592b8d18438ed11741a637bba033b952855d
+  manifest: 8bca7cc6e6a7529be004267433616011e9799ec54ee1a09a71b16d4d3cc55875
+  gates: bfa3450a2f0a035ea979e86d2c298374ef7f9d4cb4a312656a7f75a1e182f88a
+  data_manifest: fd208f2a48228d4567100ed3b5e973a1226a4f7a58151ce5c873230cf5eb25e8
+  instruments: 447785f34279d46d1b350dd0af85a34a9caccd9327a6a813bdfc4b4b15fa62b0
+  calendar: 434da4e718c19ddf7389125d2644741f3112ace1c2276478131c449f1f250ea1
+
+splits:
+  method: chronological_unsealed
+  discovery: [D1, D2]
+  confirmation: [D3]
+  D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494, role: discovery_not_confirmation}
+  D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247, role: discovery_not_confirmation}
+  D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494, role: sole_confirmation}
+  sealed_oos: closed_do_not_open
+  no_fourth_historical_oos: true
+
+campaigns:
+  - CLOSE_DISLOCATION_CONTINUATION_V1
+
+primary_campaign: CLOSE_DISLOCATION_CONTINUATION_V1
+
+CLOSE_DISLOCATION_CONTINUATION_V1:
+  mechanism_id: forced_eod_preclose_flow_continuation
+  hypothesis_family: close_dislocation_continuation
+  auction_claim: false
+  direction_policy: continuation_no_flip
+  discrepancy: observed_minus_expected
+  direction_rule: >
+    discrepancy > 0 => LONG continuation;
+    discrepancy < 0 => SHORT continuation.
+  primary_outcome: next_open_to_15m
+  diagnostic_outcomes: [close_to_next_open, next_open_to_5m, next_open_to_30m]
+  executable_claim: false
+  thresholds_inherited_from: CLOSE_DISLOCATION_REVERSAL_V1_D1_freeze
+  do_not_reestimate_thresholds: true
+  h1_remains_primary: true
+  d1_d2_not_confirmation: true
+  reviewer_approval_required: true
+  hypotheses:
+    - hypothesis_id: H1_PRIMARY
+      role: primary
+      dislocation_abs_min: 0.0046049372056016155
+      rvol_min: 1.3190530517761354
+      require_rvol: true
+    - hypothesis_id: H2_ABS_Q95
+      role: robustness
+      dislocation_abs_min: 0.0063376019291080795
+      rvol_min: 1.3190530517761354
+      require_rvol: true
+    - hypothesis_id: H3_DISLOCATION_ONLY
+      role: robustness
+      dislocation_abs_min: 0.0046049372056016155
+      rvol_min: null
+      require_rvol: false
+  trial_count_rule: one_trial_per_hypothesis_on_primary_outcome_only
+  recorded_but_not_selected: [close_to_next_open, next_open_to_5m, next_open_to_30m]

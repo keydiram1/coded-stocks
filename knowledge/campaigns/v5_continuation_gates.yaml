@@ -1,0 +1,55 @@
+# Continuation confirmation gates. SIGNAL_ONLY. NOT_APPROVED.
+# Sample/inference numbers copied from frozen V5; D3 floor remains +12bp.
+# D1/D2 are not confirmation splits for this campaign.
+version: v5_gates_close_dislocation_continuation_v1
+campaign: CLOSE_DISLOCATION_CONTINUATION_V1
+status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
+thresholds_status: INHERITED_FROM_REVERSAL_D1_FREEZE
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+
+primary_outcome: next_open_to_15m
+primary_horizon_minutes: 15
+economic_floor_bp: 12
+
+d3:
+  signed_mean_floor: 0.0012
+  signed_mean_floor_bp: 12
+  refit: false
+  rescue: false
+  require_sign_match_d2: false
+  evaluate_all_preregistered_hypotheses: true
+  note: >
+    mean <= 0 => KILL direction_failed. not D3 BH survivor => KILL d3_not_significant.
+    BH survivor and 0 < mean < +12bp => VALIDATED_SUBTHRESHOLD_PHENOMENON.
+    BH survivor and mean >= +12bp => RESEARCH_PASS.
+    Secondary horizons cannot change the decision.
+
+sample:
+  min_ticker_days: 750
+  min_trading_days: 100
+  min_tickers: 75
+  max_top_ticker_share: 0.50
+  min_win_rate: 0.48
+  counts_on: finite_primary_signed_only
+
+inference:
+  association_unit: trading_day
+  block: trading_day
+  bootstrap_draws: 1000
+  bootstrap_seed: 42
+  multiple_testing: BH
+  bh_q: 0.10
+  test: one_sided_greater_on_daily_means
+  count_every_hypothesis_as_a_trial: true
+  d1_significance_tuning: false
+  d3_bh_across_preregistered_hypotheses: true
+
+decisions:
+  KILL: fails sample, concentration, sign, BH, or D3 mean <= 0
+  VALIDATED_SUBTHRESHOLD_PHENOMENON: D3 0 < mean < +12bp and remaining gates pass
+  RESEARCH_PASS: D3 mean >= +12bp and remaining gates pass
+  note: RESEARCH_PASS is not tradable. SIGNAL_ONLY. Sealed OOS stays closed.
+
+note: Zero RESEARCH_PASS is an acceptable scientific outcome.
