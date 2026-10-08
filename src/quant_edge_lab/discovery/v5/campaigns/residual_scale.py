@@ -1,12 +1,14 @@
-"""Own-instrument residual scale. Not used by frozen reversal or continuation H1–H3.
+"""Own-instrument residual scale for continuation H4/H5. H1–H3 stay on |discrepancy|.
 
-Denominator is computed from prior completed same-clock residuals only.
-Current-day and future residuals must not enter the scale.
+Scale is the sample std of prior stored same-clock residuals (`discrepancy`),
+each already computed as observed_final_5m − beta_t × eligible_LOO_final_5m
+at that historical session. Current-day and future residuals do not enter.
 """
 
 from __future__ import annotations
 
 import numpy as np
+import polars as pl
 
 MIN_PRIOR = 20
 MAD_TO_SIGMA = 1.4826
@@ -88,3 +90,35 @@ def update_residual_history(
     rec = history.setdefault(iid, [])
     rec.append((day, float(residual)))
     history[iid] = rec[-lookback:]
+
+
+def attach_normalized_dislocation(
+    events: pl.DataFrame, *, min_prior: int = MIN_PRIOR
+) -> pl.DataFrame:
+    """Attach residual_scale and normalized_dislocation. Causal in trading_date order."""
+    if events.height == 0:
+        return events.with_columns(
+            pl.lit(None).cast(pl.Float64).alias("residual_scale"),
+            pl.lit(None).cast(pl.Float64).alias("normalized_dislocation"),
+        )
+    ordered = events.with_row_index("_rid").sort(["instrument_id", "trading_date", "_rid"])
+    hist: dict[str, list[tuple[str, float]]] = {}
+    scales: list[float | None] = []
+    zs: list[float | None] = []
+    for row in ordered.iter_rows(named=True):
+        iid = str(row["instrument_id"])
+        day = str(row["trading_date"])
+        disc = row.get("discrepancy")
+        prior = prior_residuals_only(hist.get(iid, []), day=day)
+        scale = residual_std_scale(prior, min_prior=min_prior)
+        zs.append(normalized_dislocation(disc, scale))
+        scales.append(scale)
+        update_residual_history(hist, iid=iid, day=day, residual=disc, lookback=min_prior)
+    return (
+        ordered.with_columns(
+            pl.Series("residual_scale", scales, dtype=pl.Float64),
+            pl.Series("normalized_dislocation", zs, dtype=pl.Float64),
+        )
+        .sort("_rid")
+        .drop("_rid")
+    )

@@ -506,6 +506,12 @@ def discovery_campaign_v5_continuation(
     console.print(f"sealed_oos={state['sealed_oos']}")
     console.print(f"execution_status={state['execution_status']}")
     console.print(f"h1_role={state['h1_role']}")
+    console.print(f"hypotheses={state['hypotheses']}")
+    console.print(
+        f"z_threshold_abs={state['z_threshold_abs']} "
+        f"scale_lookback={state['scale_lookback_sessions']}"
+    )
+    console.print(f"bh_q={state['bh_q']} D3={state['d3_start']}..{state['d3_end']}")
     console.print(f"launch={state['launch_command']}")
     console.print("SIGNAL_ONLY. STOP. Default does not load D3 or run confirmation.")
     raise typer.Exit(code=0)

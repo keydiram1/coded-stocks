@@ -17,12 +17,15 @@ note: >
   CLOSE_DISLOCATION_REVERSAL_V1. Continuation was formulated only after
   reversal failed in D1 and D2. D1/D2 are discovery evidence for this new
   question, not confirmation. D3 (2024-10-11 through 2026-10-01, 494 days)
-  is the sole untouched historical confirmation split. Thresholds are
+  is the sole untouched historical confirmation split. Absolute thresholds are
   inherited unchanged from the original D1 freeze. H1 remains PRIMARY
-  despite H2 having larger discovery magnitude. SIGNAL_ONLY. instruments.parquet
-  is not session-dated listing history. Any survivor still requires execution
-  modeling and proper PIT listing replication before trading-grade evidence.
-  Sealed OOS stays closed. No fourth historical OOS exists.
+  despite H2 having larger discovery magnitude. A separate volatility-normalized
+  family (H4/H5, |z|>=2 ex ante) was preregistered before D3 inspection because
+  absolute residual gates can overweight high-idiosyncratic-vol names.
+  D1/D2 must not choose z=2. H4/H5 are robustness, not primary. SIGNAL_ONLY.
+  instruments.parquet is not session-dated listing history. Any survivor still
+  requires execution modeling and proper PIT listing replication before
+  trading-grade evidence. Sealed OOS stays closed. No fourth historical OOS exists.
 
 data:
   source: reuse immutable event partitions from source run v5-close-dislocation
@@ -72,34 +75,66 @@ CLOSE_DISLOCATION_CONTINUATION_V1:
   h1_remains_primary: true
   d1_d2_not_confirmation: true
   reviewer_approval_required: true
+  absolute_family_trial_count: 3
+  normalized_family_trial_count: 2
+  total_trial_count: 5
+  normalized_scale:
+    type: same_clock_residual_std
+    lookback_sessions: 20
+    threshold_abs_z: 2.0
+    causal_only: true
+    source: stored_event_discrepancy_from_source_run
+    note: >
+      Denominator is sample std of the prior 20 finite stored same-clock
+      residuals for that instrument. Each stored discrepancy is
+      observed_final_5m − beta_available_at_that_session × eligible LOO
+      final-5m market. Pre-D3 event partitions are scale history only and
+      are not confirmation. Missing, zero, non-finite, or short history
+      makes z unavailable. No fill with 1, cross-section, market, current-day,
+      or future scale. This family asks whether the residual was abnormal
+      versus the name's own historical residual distribution, not whether
+      it exceeded a fixed return threshold.
   hypotheses:
     - hypothesis_id: H1_PRIMARY
       role: primary
+      family: absolute_continuation
       dislocation_abs_min: 0.0046049372056016155
       rvol_min: 1.3190530517761354
       require_rvol: true
     - hypothesis_id: H2_ABS_Q95
       role: robustness
+      family: absolute_continuation
       dislocation_abs_min: 0.0063376019291080795
       rvol_min: 1.3190530517761354
       require_rvol: true
     - hypothesis_id: H3_DISLOCATION_ONLY
       role: robustness
+      family: absolute_continuation
       dislocation_abs_min: 0.0046049372056016155
       rvol_min: null
       require_rvol: false
+    - hypothesis_id: H4_Z2_RVOL
+      role: robustness
+      family: volatility_normalized_continuation
+      dislocation_abs_min: null
+      z_abs_min: 2.0
+      rvol_min: 1.3190530517761354
+      require_rvol: true
+      frozen_from_split: ex_ante
+    - hypothesis_id: H5_Z2_ONLY
+      role: robustness
+      family: volatility_normalized_continuation
+      dislocation_abs_min: null
+      z_abs_min: 2.0
+      rvol_min: null
+      require_rvol: false
+      frozen_from_split: ex_ante
   trial_count_rule: one_trial_per_hypothesis_on_primary_outcome_only
   recorded_but_not_selected: [close_to_next_open, next_open_to_5m, next_open_to_30m]
   volatility_normalization:
-    in_this_campaign: false
-    recommendation: A_keep_absolute_thresholds_for_sign_flip_confirmation
+    in_this_campaign: true
+    own_vol_normalized_family: [H4_Z2_RVOL, H5_Z2_ONLY]
+    absolute_family: [H1_PRIMARY, H2_ABS_Q95, H3_DISLOCATION_ONLY]
     discrepancy_units: raw_final_5m_residual_return
-    own_vol_normalized: false
     rvol_normalizes: close_window_volume_only
-    note: >
-      Absolute |discrepancy| gates are inherited from the reversal D1 freeze.
-      Own-instrument residual-volatility z-scores are a different causal claim
-      and are not additional trials here. A later campaign may preregister
-      z = residual / rolling_std(prior same-clock residuals) with an ex-ante
-      2-sigma floor; that would increase BH trial count and is not this D3
-      confirmation. Do not estimate a z cutoff from D1/D2/D3 for this campaign.
+    z_not_estimated_from_d1_d2: true

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import polars as pl
+import pytest
 
 from quant_edge_lab.discovery.v5.campaigns.close_dislocation import apply_rule
 from quant_edge_lab.discovery.v5.campaigns.residual_scale import (
     MIN_PRIOR,
+    attach_normalized_dislocation,
     normalized_dislocation,
     prior_residuals_only,
     residual_std_scale,
     update_residual_history,
 )
+from quant_edge_lab.discovery.v5.continuation import continuation_signed
 from quant_edge_lab.discovery.v5.models import CandidateRule
 
 
@@ -86,3 +89,107 @@ def test_continuation_rules_still_use_absolute_discrepancy():
     )
     got = apply_rule(ev, rule)
     assert got.height == 2
+
+
+def _z_rule(hid: str, *, require_rvol: bool) -> CandidateRule:
+    return CandidateRule(
+        hypothesis_id=hid,
+        mechanism_id="forced_eod_preclose_flow_continuation",
+        role="robustness",
+        dislocation_abs_min=None,
+        z_abs_min=2.0,
+        rvol_min=1.3190530517761354 if require_rvol else None,
+        require_rvol=require_rvol,
+        direction_policy="continuation_no_flip",
+        primary_outcome="next_open_to_15m",
+        frozen=True,
+    )
+
+
+def test_example_a_half_percent_on_ten_bp_scale_qualifies_h4_h5():
+    assert normalized_dislocation(0.005, 0.001) == pytest.approx(5.0)
+    ev = pl.DataFrame(
+        {
+            "discrepancy": [0.005],
+            "close_volume_rvol": [2.0],
+            "normalized_dislocation": [5.0],
+        }
+    )
+    assert apply_rule(ev, _z_rule("H4_Z2_RVOL", require_rvol=True)).height == 1
+    assert apply_rule(ev, _z_rule("H5_Z2_ONLY", require_rvol=False)).height == 1
+
+
+def test_example_b_half_percent_on_fifty_bp_scale_does_not_qualify():
+    assert normalized_dislocation(0.005, 0.005) == pytest.approx(1.0)
+    ev = pl.DataFrame(
+        {
+            "discrepancy": [0.005],
+            "close_volume_rvol": [2.0],
+            "normalized_dislocation": [1.0],
+        }
+    )
+    assert apply_rule(ev, _z_rule("H4_Z2_RVOL", require_rvol=True)).height == 0
+    assert apply_rule(ev, _z_rule("H5_Z2_ONLY", require_rvol=False)).height == 0
+
+
+def test_example_c_negative_z_is_short_continuation():
+    z = normalized_dislocation(-0.005, 0.001)
+    assert z == pytest.approx(-5.0)
+    assert continuation_signed(-0.02, -0.005) == pytest.approx(0.02)
+
+
+def test_positive_z_positive_next_move_is_positive_continuation():
+    assert continuation_signed(0.01, 0.005) == pytest.approx(0.01)
+
+
+def test_changing_event_day_residual_does_not_change_denominator():
+    hist_days = [f"2024-01-{i:02d}" for i in range(1, 21)]
+    hist_vals = [0.001 + 1e-5 * i for i in range(20)]
+    base = pl.DataFrame(
+        {
+            "instrument_id": ["a"] * 20 + ["a"],
+            "trading_date": hist_days + ["2024-11-01"],
+            "discrepancy": hist_vals + [0.005],
+        }
+    )
+    a = attach_normalized_dislocation(base)
+    b = attach_normalized_dislocation(
+        base.with_columns(
+            pl.when(pl.col("trading_date") == "2024-11-01")
+            .then(pl.lit(0.9))
+            .otherwise(pl.col("discrepancy"))
+            .alias("discrepancy")
+        )
+    )
+    za = a.filter(pl.col("trading_date") == "2024-11-01")
+    zb = b.filter(pl.col("trading_date") == "2024-11-01")
+    assert za["residual_scale"][0] == zb["residual_scale"][0]
+    assert za["normalized_dislocation"][0] != zb["normalized_dislocation"][0]
+
+
+def test_future_poison_does_not_change_event_day_denominator():
+    hist_days = [f"2024-01-{i:02d}" for i in range(1, 21)]
+    hist_vals = [0.001 + 1e-5 * i for i in range(20)]
+    clean = pl.DataFrame(
+        {
+            "instrument_id": ["a"] * 21,
+            "trading_date": hist_days + ["2024-11-01"],
+            "discrepancy": hist_vals + [0.005],
+        }
+    )
+    poisoned = pl.concat(
+        [
+            clean,
+            pl.DataFrame(
+                {
+                    "instrument_id": ["a"],
+                    "trading_date": ["2024-11-02"],
+                    "discrepancy": [10.0],
+                }
+            ),
+        ]
+    )
+    a = attach_normalized_dislocation(clean).filter(pl.col("trading_date") == "2024-11-01")
+    b = attach_normalized_dislocation(poisoned).filter(pl.col("trading_date") == "2024-11-01")
+    assert a["residual_scale"][0] == b["residual_scale"][0]
+    assert a["normalized_dislocation"][0] == b["normalized_dislocation"][0]

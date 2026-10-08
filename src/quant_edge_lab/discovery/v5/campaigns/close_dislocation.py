@@ -281,9 +281,18 @@ def freeze_rules_from_d1(
 
 
 def apply_rule(events: pl.DataFrame, rule: CandidateRule) -> pl.DataFrame:
-    if rule.dislocation_abs_min is None:
+    if rule.z_abs_min is not None:
+        if "normalized_dislocation" not in events.columns:
+            return events.head(0)
+        df = events.filter(
+            pl.col("normalized_dislocation").is_not_null()
+            & pl.col("normalized_dislocation").is_finite()
+            & (pl.col("normalized_dislocation").abs() >= rule.z_abs_min)
+        )
+    elif rule.dislocation_abs_min is not None:
+        df = events.filter(pl.col("discrepancy").abs() >= rule.dislocation_abs_min)
+    else:
         return events.head(0)
-    df = events.filter(pl.col("discrepancy").abs() >= rule.dislocation_abs_min)
     if rule.require_rvol:
         if rule.rvol_min is None:
             return events.head(0)

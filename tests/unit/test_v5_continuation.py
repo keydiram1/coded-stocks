@@ -7,6 +7,7 @@ import polars as pl
 import pytest
 import yaml
 
+from quant_edge_lab.discovery.v5.campaigns.close_dislocation import apply_rule
 from quant_edge_lab.discovery.v5.continuation import (
     CAMPAIGN_ID,
     GATES_REL,
@@ -63,12 +64,16 @@ def test_continuation_signed_negates_reversal_primary_signed():
         assert c == pytest.approx(-r)
 
 
-def test_continuation_does_not_select_on_normalized_dislocation():
+def test_absolute_family_unchanged_and_normalized_family_separate():
     man, _g = load_continuation(Path("."))
     camp = man[man["primary_campaign"]]
+    assert camp["absolute_family_trial_count"] == 3
+    assert camp["normalized_family_trial_count"] == 2
+    assert camp["total_trial_count"] == 5
+    assert camp["normalized_scale"]["threshold_abs_z"] == 2.0
+    assert camp["normalized_scale"]["lookback_sessions"] == 20
     vn = camp.get("volatility_normalization") or {}
-    assert vn.get("in_this_campaign") is False
-    assert vn.get("own_vol_normalized") is False
+    assert vn.get("in_this_campaign") is True
     assert man["execution_status"] == "NOT_APPROVED"
 
 
@@ -83,6 +88,13 @@ def test_frozen_thresholds_cannot_drift():
     assert by["H3_DISLOCATION_ONLY"].dislocation_abs_min == H3_DISLOC
     assert by["H3_DISLOCATION_ONLY"].rvol_min is None
     assert by["H3_DISLOCATION_ONLY"].require_rvol is False
+    assert by["H1_PRIMARY"].z_abs_min is None
+    assert by["H4_Z2_RVOL"].z_abs_min == 2.0
+    assert by["H5_Z2_ONLY"].z_abs_min == 2.0
+    assert by["H4_Z2_RVOL"].dislocation_abs_min is None
+    assert by["H5_Z2_ONLY"].dislocation_abs_min is None
+    assert by["H4_Z2_RVOL"].rvol_min == H1_RVOL
+    assert by["H5_Z2_ONLY"].require_rvol is False
 
 
 def test_h1_remains_primary():
@@ -95,6 +107,14 @@ def test_h1_remains_primary():
     assert rules[0].hypothesis_id == "H1_PRIMARY"
     assert rules[0].role == "primary"
     assert sum(1 for r in rules if r.role == "primary") == 1
+    ids = [r.hypothesis_id for r in rules]
+    assert ids == [
+        "H1_PRIMARY",
+        "H2_ABS_Q95",
+        "H3_DISLOCATION_ONLY",
+        "H4_Z2_RVOL",
+        "H5_Z2_ONLY",
+    ]
 
 
 def test_only_d3_is_evaluable():
@@ -147,17 +167,19 @@ def test_source_identity_mismatch_refuses(tmp_path: Path):
         execute_v5_continuation(root, events=_synth_events(0.002))
 
 
-def test_d3_bh_across_exactly_three_hypotheses():
+def test_d3_bh_across_exactly_five_hypotheses():
     ev = _synth_events(0.002)
     rows = evaluate_continuation_d3(ev, frozen_rules(), _loose_gates(), split="D3")
-    assert len(rows) == 3
+    assert len(rows) == 5
     assert {r["rule"]["hypothesis_id"] for r in rows} == {
         "H1_PRIMARY",
         "H2_ABS_Q95",
         "H3_DISLOCATION_ONLY",
+        "H4_Z2_RVOL",
+        "H5_Z2_ONLY",
     }
-    assert all(r["tested_this_stage"] == 3 for r in rows)
-    assert all(r["trial_count"] == 3 for r in rows)
+    assert all(r["tested_this_stage"] == 5 for r in rows)
+    assert all(r["trial_count"] == 5 for r in rows)
     assert all("bh_rejected" in r["stats"] for r in rows)
 
 
@@ -243,14 +265,19 @@ def test_synthetic_d3_does_not_touch_real_d3_files(tmp_path: Path, monkeypatch):
         raise AssertionError("real D3 payload must not be loaded")
 
     monkeypatch.setattr(
-        "quant_edge_lab.discovery.v5.continuation_runner.load_d3_event_partitions", boom
+        "quant_edge_lab.discovery.v5.continuation_runner.load_continuation_source_events", boom
     )
-    monkeypatch.setattr("quant_edge_lab.discovery.v5.continuation.load_d3_event_partitions", boom)
+    monkeypatch.setattr(
+        "quant_edge_lab.discovery.v5.continuation.load_continuation_source_events", boom
+    )
+    monkeypatch.setattr(
+        "quant_edge_lab.discovery.v5.continuation.load_pre_d3_event_partitions", boom
+    )
     out = execute_v5_continuation(root, events=_synth_events(0.002))
     assert out["campaign_id"] == "v5_close_dislocation_continuation"
     assert out["science_id"] == SCIENCE_ID
-    assert out["trial_count"] == 3
-    assert out["tested_this_stage"] == 3
+    assert out["trial_count"] == 5
+    assert out["tested_this_stage"] == 5
     assert "D1" not in out
     assert "D2" not in out
     assert out["sealed_oos"] == "inaccessible"
@@ -271,19 +298,53 @@ def test_readiness_does_not_load_d3(monkeypatch):
     monkeypatch.setattr(
         "quant_edge_lab.discovery.v5.continuation.load_d3_event_partitions", boom
     )
+    monkeypatch.setattr(
+        "quant_edge_lab.discovery.v5.continuation.load_pre_d3_event_partitions", boom
+    )
+    monkeypatch.setattr(
+        "quant_edge_lab.discovery.v5.continuation.load_continuation_source_events", boom
+    )
     state = readiness_v5_continuation(Path("."))
     assert state["mode"] == "READINESS"
     assert state["execution_status"] == "NOT_APPROVED"
     assert state["evaluable_split"] == "D3"
     assert state["h1_role"] == "primary"
     assert state["sealed_oos"] == "inaccessible"
-    assert state["trial_count"] == 3
+    assert state["trial_count"] == 5
+    assert state["z_threshold_abs"] == 2.0
+    assert state["scale_lookback_sessions"] == 20
+    assert state["bh_q"] == 0.10
     assert CAMPAIGN_ID in state["campaigns"]
 
 
 def test_original_reversal_campaign_yaml_unmodified():
     assert sha256_file(Path(".") / REVERSAL_MANIFEST) == SOURCE_IDENTITY["manifest"]
     assert sha256_file(Path(".") / REVERSAL_GATES) == SOURCE_IDENTITY["gates"]
+
+
+def test_not_approved_refuses_real_d3_and_pre_d3_loads():
+    from quant_edge_lab.discovery.v5.continuation import (
+        load_d3_event_partitions,
+        load_pre_d3_event_partitions,
+    )
+
+    with pytest.raises(RuntimeError, match="refused"):
+        load_d3_event_partitions(Path("."))
+    with pytest.raises(RuntimeError, match="refused"):
+        load_pre_d3_event_partitions(Path("."))
+
+
+def test_normalized_rules_do_not_change_absolute_h1_h2_h3():
+    ev = _synth_events(0.002).with_columns(pl.lit(0.1).alias("normalized_dislocation"))
+    rules = frozen_rules()
+    abs_rules = [r for r in rules if r.hypothesis_id.startswith("H") and r.z_abs_min is None]
+    a = [apply_rule(ev, r).height for r in abs_rules]
+    b = [
+        apply_rule(ev.with_columns(pl.lit(9.0).alias("normalized_dislocation")), r).height
+        for r in abs_rules
+    ]
+    assert a == b
+    assert len(abs_rules) == 3
 
 
 def test_continuation_science_id_and_status():

@@ -40,6 +40,9 @@ H1_RVOL = 1.3190530517761354
 H2_DISLOC = 0.0063376019291080795
 H2_RVOL = 1.3190530517761354
 H3_DISLOC = 0.0046049372056016155
+Z_ABS = 2.0
+SCALE_LOOKBACK = 20
+PRE_D3_PAYLOAD_LOADS = 0
 
 SOURCE_IDENTITY = {
     "git": "47e8592b8d18438ed11741a637bba033b952855d",
@@ -111,6 +114,24 @@ def frozen_rules(camp: dict[str, Any] | None = None) -> list[CandidateRule]:
                 "rvol_min": None,
                 "require_rvol": False,
             },
+            {
+                "hypothesis_id": "H4_Z2_RVOL",
+                "role": "robustness",
+                "dislocation_abs_min": None,
+                "z_abs_min": Z_ABS,
+                "rvol_min": H1_RVOL,
+                "require_rvol": True,
+                "frozen_from_split": "ex_ante",
+            },
+            {
+                "hypothesis_id": "H5_Z2_ONLY",
+                "role": "robustness",
+                "dislocation_abs_min": None,
+                "z_abs_min": Z_ABS,
+                "rvol_min": None,
+                "require_rvol": False,
+                "frozen_from_split": "ex_ante",
+            },
         ]
     out: list[CandidateRule] = []
     for spec in specs:
@@ -120,11 +141,12 @@ def frozen_rules(camp: dict[str, Any] | None = None) -> list[CandidateRule]:
                 mechanism_id=MECHANISM_ID,
                 role=spec["role"],
                 dislocation_abs_min=spec.get("dislocation_abs_min"),
+                z_abs_min=spec.get("z_abs_min"),
                 rvol_min=spec.get("rvol_min"),
                 require_rvol=bool(spec["require_rvol"]),
                 direction_policy="continuation_no_flip",
                 primary_outcome="next_open_to_15m",
-                frozen_from_split="D1",
+                frozen_from_split=str(spec.get("frozen_from_split") or "D1"),
                 frozen=True,
             )
         )
@@ -143,6 +165,19 @@ def assert_frozen_thresholds(rules: list[CandidateRule]) -> None:
         raise ResumeIdentityError("H3 frozen threshold drifted")
     if by["H3_DISLOCATION_ONLY"].rvol_min is not None or by["H3_DISLOCATION_ONLY"].require_rvol:
         raise ResumeIdentityError("H3 must remain dislocation-only")
+    if len(rules) != 5:
+        raise ResumeIdentityError("continuation campaign must preregister exactly 5 hypotheses")
+    for hid in ("H4_Z2_RVOL", "H5_Z2_ONLY"):
+        if by[hid].z_abs_min != Z_ABS:
+            raise ResumeIdentityError(f"{hid} z threshold drifted")
+        if by[hid].dislocation_abs_min is not None:
+            raise ResumeIdentityError(f"{hid} must not use the absolute return gate")
+        if by[hid].role != "robustness":
+            raise ResumeIdentityError(f"{hid} must remain robustness")
+    if by["H4_Z2_RVOL"].rvol_min != H1_RVOL or not by["H4_Z2_RVOL"].require_rvol:
+        raise ResumeIdentityError("H4 must reuse the frozen RVOL gate")
+    if by["H5_Z2_ONLY"].rvol_min is not None or by["H5_Z2_ONLY"].require_rvol:
+        raise ResumeIdentityError("H5 must remain z-only")
 
 
 def assert_execution_approved(man: dict[str, Any], gates: dict[str, Any]) -> None:
@@ -219,6 +254,33 @@ def attach_continuation(events: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def _event_partition_files(root: Path, *, d3_only: bool | None) -> list[Path]:
+    base = source_run_dir(root) / "events"
+    if not base.exists():
+        raise ResumeIdentityError("source event store missing")
+    files = []
+    for p in sorted(base.glob("date=*/part.parquet")):
+        day = p.parent.name.replace("date=", "")
+        in_d3 = D3[0] <= day <= D3[1]
+        if d3_only is True and in_d3:
+            files.append(p)
+        elif d3_only is False and day < D3[0]:
+            files.append(p)
+    return files
+
+
+def load_pre_d3_event_partitions(root: Path) -> pl.DataFrame:
+    """Scale history only. Dates strictly before D3. Forbidden until YAML is APPROVED/FROZEN."""
+    global PRE_D3_PAYLOAD_LOADS
+    man, gates = load_continuation(root)
+    assert_d3_payload_allowed(man, gates)
+    files = _event_partition_files(root, d3_only=False)
+    PRE_D3_PAYLOAD_LOADS += 1
+    if not files:
+        return pl.DataFrame()
+    return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed")
+
+
 def assert_d3_payload_allowed(man: dict[str, Any], gates: dict[str, Any]) -> None:
     assert_execution_approved(man, gates)
 
@@ -228,18 +290,20 @@ def load_d3_event_partitions(root: Path) -> pl.DataFrame:
     global D3_PAYLOAD_LOADS
     man, gates = load_continuation(root)
     assert_d3_payload_allowed(man, gates)
-    base = source_run_dir(root) / "events"
-    if not base.exists():
-        raise ResumeIdentityError("source event store missing")
-    files = []
-    for p in sorted(base.glob("date=*/part.parquet")):
-        day = p.parent.name.replace("date=", "")
-        if D3[0] <= day <= D3[1]:
-            files.append(p)
+    files = _event_partition_files(root, d3_only=True)
     if not files:
         raise ResumeIdentityError("no D3 event partitions in source run")
     D3_PAYLOAD_LOADS += 1
     return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed")
+
+
+def load_continuation_source_events(root: Path) -> pl.DataFrame:
+    """Pre-D3 residuals for scale plus D3 confirmation rows. Both loads require approval."""
+    pre = load_pre_d3_event_partitions(root)
+    d3 = load_d3_event_partitions(root)
+    if pre.height == 0:
+        return d3
+    return pl.concat([pre, d3], how="diagonal_relaxed")
 
 
 def new_run_dir(root: Path, run_id: str = DEFAULT_RUN_ID) -> Path:

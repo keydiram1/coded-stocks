@@ -45,6 +45,8 @@ inference:
   count_every_hypothesis_as_a_trial: true
   d1_significance_tuning: false
   d3_bh_across_preregistered_hypotheses: true
+  preregistered_hypothesis_count: 5
+  d3_bh_across_all_five_hypotheses: true
 
 decisions:
   KILL: fails sample, concentration, sign, BH, or D3 mean <= 0

@@ -7,13 +7,17 @@ from typing import Any
 import polars as pl
 
 from quant_edge_lab.discovery.knowledge import atomic_write_json
+from quant_edge_lab.discovery.v5.campaigns.residual_scale import attach_normalized_dislocation
 from quant_edge_lab.discovery.v5.continuation import (
     CAMPAIGN_ID,
+    D3,
     DEFAULT_RUN_ID,
+    SCALE_LOOKBACK,
     SCIENCE_ID,
     SOURCE_CAMPAIGN,
     SOURCE_IDENTITY,
     SOURCE_RUN_ID,
+    Z_ABS,
     assert_continuation_negates_reversal,
     assert_execution_approved,
     assert_frozen_thresholds,
@@ -23,7 +27,7 @@ from quant_edge_lab.discovery.v5.continuation import (
     freeze_continuation,
     frozen_rules,
     load_continuation,
-    load_d3_event_partitions,
+    load_continuation_source_events,
     new_run_dir,
     refuse_discovery_split,
 )
@@ -34,8 +38,12 @@ from quant_edge_lab.discovery.v5.partitions import assert_sealed_oos_closed
 DIAGNOSTIC_HORIZONS = ("next_open_to_5m", "next_open_to_30m", "close_to_next_open")
 DISCOVERY_PROVENANCE = {
     "note": (
-        "D1 and D2 are discovery evidence used to formulate continuation after reversal "
-        "failed. They are not confirmation results for this campaign and were not re-evaluated."
+        "The continuation hypothesis arose because the preregistered reversal "
+        "hypothesis produced the opposite sign in D1 and D2. Those splits are "
+        "discovery, not confirmation. The volatility-normalization concern was "
+        "identified before D3 inspection; H4/H5 were preregistered before D3 was "
+        "opened. D1/D2 must not choose or optimize z=2.0. H1 remains primary. "
+        "H4/H5 are robustness/mechanism-cleanliness tests, not promoted primary rules."
     ),
     "reversal_campaign_published_primary_signed_mean_bp": {
         "H1_PRIMARY": {"D1": -6.587840, "D2": -9.848435},
@@ -77,6 +85,14 @@ def readiness_v5_continuation(root) -> dict[str, Any]:
         "h1_role": next(
             h["role"] for h in camp["hypotheses"] if h["hypothesis_id"] == "H1_PRIMARY"
         ),
+        "absolute_family_trial_count": 3,
+        "normalized_family_trial_count": 2,
+        "z_threshold_abs": Z_ABS,
+        "scale_lookback_sessions": SCALE_LOOKBACK,
+        "normalized_scale_type": "same_clock_residual_std",
+        "bh_q": gates["inference"]["bh_q"],
+        "d3_start": man["splits"]["D3"]["start"],
+        "d3_end": man["splits"]["D3"]["end"],
         "sealed_oos": man["sealed_oos"],
         "status": man["status"],
         "execution_status": man.get("execution_status") or gates.get("execution_status"),
@@ -97,6 +113,10 @@ def evaluate_continuation_d3(
     split: str = "D3",
 ) -> list[dict[str, Any]]:
     refuse_discovery_split(split)
+    if events.height and "trading_date" in events.columns:
+        events = events.filter(
+            (pl.col("trading_date") >= D3[0]) & (pl.col("trading_date") <= D3[1])
+        )
     ids = {r.hypothesis_id for r in rules}
     return evaluate_frozen(
         events,
@@ -134,6 +154,10 @@ def _public_hypothesis(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def diagnostic_horizons(events: pl.DataFrame) -> dict[str, Any]:
+    if events.height and "trading_date" in events.columns:
+        events = events.filter(
+            (pl.col("trading_date") >= D3[0]) & (pl.col("trading_date") <= D3[1])
+        )
     out: dict[str, Any] = {}
     for col in DIAGNOSTIC_HORIZONS:
         if col not in events.columns:
@@ -174,7 +198,8 @@ def execute_v5_continuation(
     assert_frozen_thresholds(rules)
     source = assert_source_identity(root)
     if events is None:
-        events = load_d3_event_partitions(root)
+        events = load_continuation_source_events(root)
+    events = attach_normalized_dislocation(events)
     events = attach_continuation(events)
     assert_continuation_negates_reversal(events)
     rows = evaluate_continuation_d3(events, rules, gates, split="D3")
@@ -199,7 +224,14 @@ def execute_v5_continuation(
         "diagnostic_horizons": diagnostic_horizons(events),
         "provenance": DISCOVERY_PROVENANCE,
         "identity": ident,
-        "note": "D3 only. D1/D2 were not evaluated. Secondary horizons are diagnostic only.",
+        "absolute_family_trial_count": 3,
+        "normalized_family_trial_count": 2,
+        "z_threshold_abs": Z_ABS,
+        "scale_lookback_sessions": SCALE_LOOKBACK,
+        "note": (
+            "D3 only. D1/D2 were not evaluated as confirmation. "
+            "H4/H5 are a separate residual-z family. Secondary horizons are diagnostic only."
+        ),
     }
     out_dir = new_run_dir(root, run_id)
     atomic_write_json(out_dir / "final.json", report)

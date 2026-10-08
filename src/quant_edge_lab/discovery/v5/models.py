@@ -54,6 +54,7 @@ class CandidateRule(BaseModel):
     mechanism_id: str
     role: Literal["primary", "robustness"]
     dislocation_abs_min: float | None = None
+    z_abs_min: float | None = None
     rvol_min: float | None = None
     require_rvol: bool = True
     direction_policy: Literal["reversal_no_flip", "continuation_no_flip"] = "reversal_no_flip"
