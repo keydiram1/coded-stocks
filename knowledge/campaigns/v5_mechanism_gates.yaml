@@ -1,12 +1,13 @@
 # V5 CLOSE_DISLOCATION gates. Campaign-specific. SIGNAL_ONLY.
-# REVIEWER_APPROVAL_REQUIRED before execution.
-# These are preregistered proposals, not results.
+# Independent review complete. FROZEN BEFORE empirical V5 execution.
+# Numerical gates are unchanged; this is not a result file.
 version: v5_gates_close_dislocation_v1
 campaign: CLOSE_DISLOCATION_REVERSAL_V1
 status: SIGNAL_ONLY
-execution_status: NOT_APPROVED
-thresholds_status: PREREGISTERED_PROPOSAL_NOT_EXECUTED
-reviewer_approval_required: true
+execution_status: FROZEN
+thresholds_status: FROZEN_BEFORE_EMPIRICAL_EXECUTION
+reviewer_approval_required: false
+frozen_before_empirical_execution: true
 
 primary_outcome: next_open_to_15m
 primary_horizon_minutes: 15

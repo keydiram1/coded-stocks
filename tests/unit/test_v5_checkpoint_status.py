@@ -146,28 +146,38 @@ def test_readiness_helper_matches_cli_contract():
         assert k in r
     assert r["partitions"]["D1"]["start"] == "2021-10-29"
     assert set(SPLIT_ORDER) == {"D1", "D2", "D3"}
-    assert r["execution_status"] == "NOT_APPROVED"
+    assert r["execution_status"] == "FROZEN"
 
 
 def test_execute_refused_until_approved():
     from quant_edge_lab.discovery.v5.runner import assert_execution_approved
 
     man, gates = load_v5(Path("."))
-    try:
-        assert_execution_approved(man, gates)
-        raise AssertionError("execute must refuse NOT_APPROVED")
-    except RuntimeError as exc:
-        assert "refused" in str(exc)
+    assert_execution_approved(man, gates)
     both = {**man, "execution_status": "APPROVED"}, {**gates, "execution_status": "FROZEN"}
     assert_execution_approved(*both)
     try:
-        assert_execution_approved({**man, "execution_status": "APPROVED"}, gates)
+        assert_execution_approved(
+            {**man, "execution_status": "APPROVED"},
+            {**gates, "execution_status": "NOT_APPROVED"},
+        )
         raise AssertionError("gates not approved must refuse")
     except RuntimeError:
         pass
     try:
-        assert_execution_approved(man, {**gates, "execution_status": "APPROVED"})
+        assert_execution_approved(
+            {**man, "execution_status": "NOT_APPROVED"},
+            {**gates, "execution_status": "APPROVED"},
+        )
         raise AssertionError("manifest not approved must refuse")
+    except RuntimeError:
+        pass
+    try:
+        assert_execution_approved(
+            {**man, "execution_status": "NOT_APPROVED"},
+            {**gates, "execution_status": "NOT_APPROVED"},
+        )
+        raise AssertionError("both not approved must refuse")
     except RuntimeError:
         pass
 

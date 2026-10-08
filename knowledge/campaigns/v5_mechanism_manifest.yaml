@@ -2,8 +2,9 @@ campaign_id: v5_mechanism_first
 version: v5
 science_id: v5_mechanism_expected_observed_discrepancy_v1
 status: SIGNAL_ONLY
-execution_status: NOT_APPROVED
-reviewer_approval_required: true
+execution_status: FROZEN
+reviewer_approval_required: false
+frozen_before_empirical_execution: true
 sealed_oos: inaccessible
 parent_campaigns:
   - directional_campaign_v4
@@ -11,8 +12,9 @@ parent_campaigns:
 v4_v4r: closed_untouched
 note: >
   V5 is mechanism-first. V4/V4R remain frozen with 0 RESEARCH_PASS.
-  Minute-bar results remain SIGNAL_ONLY. This YAML is a preregistered
-  proposal for independent review BEFORE any execution.
+  Minute-bar results remain SIGNAL_ONLY. Independent code review is
+  complete. This configuration is FROZEN BEFORE any empirical V5
+  execution. Do not retune after seeing results.
 
 data:
   source: massive-flat minute bars only
@@ -122,8 +124,8 @@ CLOSE_DISLOCATION_REVERSAL_V1:
   event_policy: first_and_only_close_event_per_instrument_day
   d1_role: estimate_preregistered_quantiles_and_freeze_rule
   d2_d3_role: frozen_application_only
-  thresholds_status: PREREGISTERED_PROPOSAL_NOT_EXECUTED
-  reviewer_approval_required: true
+  thresholds_status: FROZEN_BEFORE_EMPIRICAL_EXECUTION
+  reviewer_approval_required: false
   hypotheses:
     - hypothesis_id: H1_PRIMARY
       role: primary

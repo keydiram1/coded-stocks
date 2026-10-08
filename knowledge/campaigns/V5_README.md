@@ -6,8 +6,8 @@ V5 hypotheses.
 V5 unit of research: mechanism → expected → observed → discrepancy →
 directional resolution → falsification.
 
-YAML in this directory is a **preregistered proposal**. Thresholds and the
-campaign-specific 12bp floor require reviewer approval before `--execute`.
+YAML in this directory is **FROZEN** after independent review and **before**
+any empirical V5 execution. Do not retune thresholds after seeing results.
 
 `CLOSE_DISLOCATION_REVERSAL_V1` (`forced_eod_preclose_flow`) tests whether
 abnormal close-window volume plus idiosyncratic final-5m displacement vs a
