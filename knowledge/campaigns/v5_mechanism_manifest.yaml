@@ -1,0 +1,110 @@
+campaign_id: v5_mechanism_first
+version: v5
+science_id: v5_mechanism_expected_observed_discrepancy_v1
+status: SIGNAL_ONLY
+sealed_oos: inaccessible
+parent_campaigns:
+  - directional_campaign_v4
+  - directional_campaign_v4r
+v4_v4r: closed_untouched
+note: >
+  V5 is mechanism-first. V4/V4R remain frozen with 0 RESEARCH_PASS.
+  Minute-bar results remain SIGNAL_ONLY. This YAML is a preregistered
+  proposal for independent review BEFORE any execution.
+
+data:
+  source: massive-flat minute bars only
+  identity: hash of massive flatfiles minute_aggs_v1_manifest.json
+  no_download: [news, trades, quotes, NBBO, L2, L3, fundamentals, options_flatfiles]
+  options_status: not_in_this_campaign_pending_s3_entitlement
+
+splits:
+  method: chronological_unsealed
+  warmup_last_day: '2021-10-28'
+  D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494}
+  D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247}
+  D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494}
+  sealed_oos: closed_do_not_open
+  no_fourth_historical_oos: true
+
+session:
+  tz: America/New_York
+  rth_start: '09:30'
+  rth_end: '16:00'
+  full_day_last_bar: '15:59'
+  close_window_first_bar: '15:55'
+  close_window_last_bar: '15:59'
+  close_return_anchor_bar: '15:54'
+  min_rth_minutes_full_day: 380
+  half_days: exclude
+  half_day_policy: >
+    A calendar day is FULL_RTH only if the cross-section median last RTH bar
+    is 15:59 ET and unique RTH minute labels >= min_rth_minutes_full_day.
+    Per-name events require bars 15:54 through 15:59 on that session.
+    Half-days and incomplete sessions are excluded, not silently adjusted.
+    No NYSE holiday table is used; classification is from the minute panel.
+
+beta:
+  window_trading_days: 20
+  estimator: ols_covariance_with_intercept_form
+  insufficient: null
+  no_fallback_to_one: true
+  uses: completed_prior_days_only
+
+market:
+  loo: true
+  weight: equal
+  weight_note: REVIEWER_APPROVAL_REQUIRED — equal-weight LOO for V1 simplicity; not V4 sqrt-dollar-volume.
+
+rvol:
+  lookback_completed_days: 20
+  window: close_clock_only
+  baseline: prior_completed_days_same_instrument_same_close_window
+  insufficient: null
+
+campaigns:
+  - CLOSE_DISLOCATION_REVERSAL_V1
+
+primary_campaign: CLOSE_DISLOCATION_REVERSAL_V1
+
+CLOSE_DISLOCATION_REVERSAL_V1:
+  mechanism_id: forced_eod_auction_flow
+  hypothesis_family: close_dislocation_reversal
+  asset_class: us_equity
+  unit: instrument_session_close
+  observed: stock_final_5m_return
+  expected: causal_20d_beta_times_loo_xs_market_final_5m
+  discrepancy: observed_minus_expected
+  context: close_volume_rvol
+  direction_policy: reversal_no_flip
+  direction_rule: >
+    positive discrepancy => SHORT resolution;
+    negative discrepancy => LONG resolution.
+  primary_outcome: next_open_to_15m
+  diagnostic_outcomes: [close_to_next_open]
+  execution_research_outcomes: [next_open_to_5m, next_open_to_15m, next_open_to_30m]
+  executable_claim: false
+  close_to_open_is_not_an_executable_fill: true
+  event_policy: first_and_only_close_event_per_instrument_day
+  d1_role: estimate_preregistered_quantiles_and_freeze_rule
+  d2_d3_role: frozen_application_only
+  thresholds_status: PREREGISTERED_PROPOSAL_NOT_EXECUTED
+  reviewer_approval_required: true
+  hypotheses:
+    - hypothesis_id: H1_PRIMARY
+      role: primary
+      dislocation_abs_quantile: 0.90
+      rvol_min_quantile: 0.80
+      require_rvol: true
+    - hypothesis_id: H2_ABS_Q95
+      role: robustness
+      dislocation_abs_quantile: 0.95
+      rvol_min_quantile: 0.80
+      require_rvol: true
+    - hypothesis_id: H3_DISLOCATION_ONLY
+      role: robustness
+      dislocation_abs_quantile: 0.90
+      rvol_min_quantile: null
+      require_rvol: false
+  trial_count_rule: one_trial_per_hypothesis_on_primary_outcome_only
+  recorded_but_not_selected: [close_to_next_open, next_open_to_5m, next_open_to_30m]

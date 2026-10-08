@@ -84,6 +84,24 @@ same feature/event/outcome engine. Massive bars are stored unadjusted.
 
 See `MASTER_RESEARCH_CONTEXT.md` for why the repo looks like this.
 
+## V5 (mechanism-first)
+
+V4/V4R are closed (0 RESEARCH_PASS). V5 does not mine generic OHLCV trees.
+
+```bash
+python -m quant_edge_lab discovery campaign-v5
+python -m quant_edge_lab discovery v5-status
+```
+
+Default `campaign-v5` is **readiness-only** (manifest/gates/data hashes, partitions,
+trial count, sealed OOS closed). It does not run research. `--execute` is for a
+later authorized run after independent review.
+
+First campaign: `CLOSE_DISLOCATION_REVERSAL_V1` — a cheap forced-flow / close
+dislocation *falsification* test. It is not known to work. Options local
+relative value remains future work pending Options data. Minute results remain
+**SIGNAL_ONLY**.
+
 ## Implemented vs deferred
 
 **Implemented:** sample generator, Massive 1m ingest (resumable), dataset switch

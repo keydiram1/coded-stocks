@@ -441,6 +441,37 @@ def discovery_campaign_v4r(
     console.print("SIGNAL_ONLY. Sealed OOS not opened.")
 
 
+@disc_app.command("campaign-v5")
+def discovery_campaign_v5(
+    execute: bool = typer.Option(False, "--execute", help="Forbidden until independent review. Default is readiness-only."),
+) -> None:
+    """V5 mechanism-first campaign. Default prints freeze identity and exits."""
+    from quant_edge_lab.discovery.v5.runner import run_campaign_v5
+
+    root = Path.cwd()
+    state = run_campaign_v5(root, execute=execute)
+    if not execute:
+        console.print(f"FROZEN v5 manifest={state['manifest_hash']} gates={state['gates_hash']} git={state['git']}")
+        console.print(f"data_manifest={state['data_manifest_hash']} science={state['science']}")
+        console.print(f"campaigns={state['campaigns']}")
+        console.print(f"partitions D1={state['partitions']['D1']} D2={state['partitions']['D2']} D3={state['partitions']['D3']}")
+        console.print(f"primary_outcome={state['primary_outcome']} trial_count={state['trial_count']}")
+        console.print(f"sealed_oos={state['sealed_oos']}")
+        console.print(f"launch={state['launch_command']}")
+        console.print("SIGNAL_ONLY. STOP. Default does not run research.")
+        raise typer.Exit(code=0)
+    console.print(json.dumps({k: state[k] for k in state if k != "rules"}, default=str)[:4000])
+    console.print("SIGNAL_ONLY. Sealed OOS not opened.")
+
+
+@disc_app.command("v5-status")
+def discovery_v5_status(run_id: str | None = typer.Option(None, help="Optional run id. Never starts research.")) -> None:
+    """Read-only V5 checkpoint/status. Does not mutate artifacts."""
+    from quant_edge_lab.discovery.v5.status import summarize_status
+
+    console.print(summarize_status(Path.cwd(), run_id))
+
+
 @disc_app.command("campaign-v4")
 def discovery_campaign_v4(
     execute: bool = typer.Option(False, "--execute", help="Do not use until freeze is accepted. Full matrix/D1–D3."),

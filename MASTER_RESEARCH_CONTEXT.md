@@ -97,6 +97,19 @@ May propose hypotheses, adversarial explanations, and experiment configs.
 Must not choose favorable fills, hide failed variants, or declare profitability
 from a pretty equity curve. The deterministic engine is the authority.
 
+## Campaign status (do not rewrite historical artifacts)
+
+- V4 / V4R: closed. RESULT: 0 RESEARCH_PASS. One V4R
+  VALIDATED_SUBTHRESHOLD_PHENOMENON is not an edge. Do not reopen V4 science.
+- **Feature ≠ phenomenon ≠ edge.** A split in a tree is not a mechanism.
+- V5 is mechanism-first: expected vs observed vs discrepancy vs directional
+  resolution vs falsification. First executable campaign is
+  `CLOSE_DISLOCATION_REVERSAL_V1` (forced end-of-day flow / auction dislocation
+  on equity minute bars). HYPOTHESIS only — not known to work.
+- Options Local Relative Value is a high-priority *future* V5 campaign after
+  Options Flat Files ingest is unblocked. Not implemented in the V5 code branch.
+- Minute-bar results remain SIGNAL_ONLY.
+
 ## What this repo implemented in v0.1
 
 A working local vertical slice on **synthetic** data with the scientific labels

@@ -1,0 +1,55 @@
+# V5 CLOSE_DISLOCATION gates. Campaign-specific. SIGNAL_ONLY.
+# REVIEWER_APPROVAL_REQUIRED before execution.
+# These are preregistered proposals, not results.
+version: v5_gates_close_dislocation_v1
+campaign: CLOSE_DISLOCATION_REVERSAL_V1
+status: SIGNAL_ONLY
+thresholds_status: PREREGISTERED_PROPOSAL_NOT_EXECUTED
+reviewer_approval_required: true
+
+primary_outcome: next_open_to_15m
+primary_horizon_minutes: 15
+
+# Not a global inherited V4R constant. Same 12bp number is proposed here
+# only so a reviewer can accept or replace it before any run.
+economic_floor_abs_mean:
+  value: 0.0012
+  units: signed_mean_primary_return
+  origin: campaign_specific_proposal
+  inherited_from_v4r_as_global: false
+  reviewer_note: Approve, change, or reject this floor before --execute.
+
+sample:
+  min_ticker_days: 750
+  min_trading_days: 100
+  min_tickers: 75
+  max_top_ticker_share: 0.50
+  min_win_rate: 0.48
+
+inference:
+  association_unit: trading_day
+  block: trading_day
+  bootstrap_draws: 1000
+  bootstrap_seed: 42
+  multiple_testing: BH
+  bh_q: 0.10
+  count_every_hypothesis_as_a_trial: true
+
+d2:
+  refit: false
+  move_thresholds: false
+  flip_direction: false
+
+d3:
+  refit: false
+  rescue: false
+  require_sign_match_d2: true
+  abs_mean_floor_uses: economic_floor_abs_mean
+
+decisions:
+  KILL: fails sample, concentration, sign, or robustness requirements
+  VALIDATED_SUBTHRESHOLD_PHENOMENON: D3 sign-matches D2 and is below economic floor
+  RESEARCH_PASS: D3 sign-matches D2 and abs mean >= economic floor
+  note: RESEARCH_PASS is not tradable. SIGNAL_ONLY. Sealed OOS stays closed.
+
+note: Zero RESEARCH_PASS is an acceptable scientific outcome.
