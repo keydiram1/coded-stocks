@@ -63,6 +63,15 @@ def test_continuation_signed_negates_reversal_primary_signed():
         assert c == pytest.approx(-r)
 
 
+def test_continuation_does_not_select_on_normalized_dislocation():
+    man, _g = load_continuation(Path("."))
+    camp = man[man["primary_campaign"]]
+    vn = camp.get("volatility_normalization") or {}
+    assert vn.get("in_this_campaign") is False
+    assert vn.get("own_vol_normalized") is False
+    assert man["execution_status"] == "NOT_APPROVED"
+
+
 def test_frozen_thresholds_cannot_drift():
     man, _gates = load_continuation(Path("."))
     rules = frozen_rules(man[man["primary_campaign"]])

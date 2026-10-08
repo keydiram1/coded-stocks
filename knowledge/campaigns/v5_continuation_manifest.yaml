@@ -90,3 +90,16 @@ CLOSE_DISLOCATION_CONTINUATION_V1:
       require_rvol: false
   trial_count_rule: one_trial_per_hypothesis_on_primary_outcome_only
   recorded_but_not_selected: [close_to_next_open, next_open_to_5m, next_open_to_30m]
+  volatility_normalization:
+    in_this_campaign: false
+    recommendation: A_keep_absolute_thresholds_for_sign_flip_confirmation
+    discrepancy_units: raw_final_5m_residual_return
+    own_vol_normalized: false
+    rvol_normalizes: close_window_volume_only
+    note: >
+      Absolute |discrepancy| gates are inherited from the reversal D1 freeze.
+      Own-instrument residual-volatility z-scores are a different causal claim
+      and are not additional trials here. A later campaign may preregister
+      z = residual / rolling_std(prior same-clock residuals) with an ex-ante
+      2-sigma floor; that would increase BH trial count and is not this D3
+      confirmation. Do not estimate a z cutoff from D1/D2/D3 for this campaign.
