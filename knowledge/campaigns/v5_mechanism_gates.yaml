@@ -4,20 +4,32 @@
 version: v5_gates_close_dislocation_v1
 campaign: CLOSE_DISLOCATION_REVERSAL_V1
 status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
 thresholds_status: PREREGISTERED_PROPOSAL_NOT_EXECUTED
 reviewer_approval_required: true
 
 primary_outcome: next_open_to_15m
 primary_horizon_minutes: 15
 
-# Not a global inherited V4R constant. Same 12bp number is proposed here
-# only so a reviewer can accept or replace it before any run.
-economic_floor_abs_mean:
-  value: 0.0012
-  units: signed_mean_primary_return
-  origin: campaign_specific_proposal
-  inherited_from_v4r_as_global: false
-  reviewer_note: Approve, change, or reject this floor before --execute.
+# Signed floors on primary_signed (positive = predicted reversal worked).
+# NOT absolute-value tests. Negative means must never PASS.
+d2:
+  signed_mean_floor: 0.0003
+  signed_mean_floor_bp: 3
+  refit: false
+  move_thresholds: false
+  flip_direction: false
+  note: mean <= 0 => KILL direction_failed; 0 < mean < 3bp => KILL below_d2_floor.
+
+d3:
+  signed_mean_floor: 0.0012
+  signed_mean_floor_bp: 12
+  refit: false
+  rescue: false
+  require_sign_match_d2: true
+  note: >
+    mean <= 0 => KILL. 0 < mean < 12bp may be VALIDATED_SUBTHRESHOLD_PHENOMENON
+    only if other gates pass. mean >= +12bp may be RESEARCH_PASS only if all gates pass.
 
 sample:
   min_ticker_days: 750
@@ -25,6 +37,7 @@ sample:
   min_tickers: 75
   max_top_ticker_share: 0.50
   min_win_rate: 0.48
+  counts_on: finite_primary_signed_only
 
 inference:
   association_unit: trading_day
@@ -33,23 +46,16 @@ inference:
   bootstrap_seed: 42
   multiple_testing: BH
   bh_q: 0.10
+  test: one_sided_greater_on_daily_means
   count_every_hypothesis_as_a_trial: true
-
-d2:
-  refit: false
-  move_thresholds: false
-  flip_direction: false
-
-d3:
-  refit: false
-  rescue: false
-  require_sign_match_d2: true
-  abs_mean_floor_uses: economic_floor_abs_mean
+  d1_significance_tuning: false
+  d2_bh_across_preregistered_hypotheses: true
+  d3_only_d2_bh_survivors: true
 
 decisions:
-  KILL: fails sample, concentration, sign, or robustness requirements
-  VALIDATED_SUBTHRESHOLD_PHENOMENON: D3 sign-matches D2 and is below economic floor
-  RESEARCH_PASS: D3 sign-matches D2 and abs mean >= economic floor
-  note: RESEARCH_PASS is not tradable. SIGNAL_ONLY. Sealed OOS stays closed.
+  KILL: fails sample, concentration, sign, D2 floor, BH, or D3 mean <= 0
+  VALIDATED_SUBTHRESHOLD_PHENOMENON: D3 0 < mean < +12bp and remaining gates pass
+  RESEARCH_PASS: D3 mean >= +12bp and remaining gates pass
+  note: RESEARCH_PASS is not tradable. SIGNAL_ONLY. Sealed OOS stays closed. Negative means never PASS.
 
 note: Zero RESEARCH_PASS is an acceptable scientific outcome.

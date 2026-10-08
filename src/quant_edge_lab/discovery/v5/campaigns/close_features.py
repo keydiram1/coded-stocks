@@ -9,7 +9,7 @@ import polars as pl
 
 from quant_edge_lab.discovery.v5.models import Direction
 from quant_edge_lab.features.v4.residuals import loo_market_returns, winsor_weights
-from quant_edge_lab.features.v4r.beta import BETA_WINDOW, MIN_PAIRS, beta_from_history, daily_return_panel, loo_daily_market, ols_beta
+from quant_edge_lab.features.v4r.beta import BETA_WINDOW, MIN_PAIRS, beta_from_history, loo_daily_market, ols_beta
 
 CLOSE_ANCHOR = time(15, 54)
 CLOSE_LAST = time(15, 59)
@@ -44,13 +44,19 @@ def signed_resolution(forward: float | None, direction: Direction | None) -> flo
     return sign * float(forward)
 
 
-def close_volume_rvol(current_vol: float | None, prior_vols: list[float]) -> float | None:
+def close_volume_rvol(
+    current_vol: float | None,
+    prior_vols: list[float],
+    *,
+    min_prior: int = 20,
+) -> float | None:
     if current_vol is None or not np.isfinite(current_vol):
         return None
     base = [v for v in prior_vols if v is not None and np.isfinite(v) and v > 0]
-    if not base:
+    if len(base) < min_prior:
         return None
-    den = float(np.mean(base))
+    use = base[-min_prior:]
+    den = float(np.mean(use))
     if den <= 0:
         return None
     return float(current_vol) / den
@@ -91,10 +97,13 @@ def pick_window_volume(g: pl.DataFrame) -> float | None:
 
 
 def pick_open(g: pl.DataFrame) -> tuple[float | None, object | None]:
-    rth = g.sort("time_et")
-    if rth.height == 0:
+    """RTH open is the 09:30 bar open only. Later first prints are not the open."""
+    from quant_edge_lab.discovery.v5.session import RTH_OPEN
+
+    sub = g.filter(pl.col("time_et") == RTH_OPEN)
+    if sub.height == 0:
         return None, None
-    row = rth.row(0, named=True)
+    row = sub.row(0, named=True)
     return float(row["open"]), row.get("ts_utc")
 
 
@@ -122,7 +131,6 @@ __all__ = [
     "bar_return",
     "beta_from_history",
     "close_volume_rvol",
-    "daily_return_panel",
     "discrepancy",
     "expected_final_5m",
     "final_5m_from_named_bars",

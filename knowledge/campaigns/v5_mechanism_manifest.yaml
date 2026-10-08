@@ -2,6 +2,8 @@ campaign_id: v5_mechanism_first
 version: v5
 science_id: v5_mechanism_expected_observed_discrepancy_v1
 status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
 sealed_oos: inaccessible
 parent_campaigns:
   - directional_campaign_v4
@@ -38,11 +40,12 @@ session:
   min_rth_minutes_full_day: 380
   half_days: exclude
   half_day_policy: >
-    A calendar day is FULL_RTH only if the cross-section median last RTH bar
-    is 15:59 ET and unique RTH minute labels >= min_rth_minutes_full_day.
-    Per-name events require bars 15:54 through 15:59 on that session.
-    Half-days and incomplete sessions are excluded, not silently adjusted.
-    No NYSE holiday table is used; classification is from the minute panel.
+    MARKET-DAY classification uses the union of RTH minute labels across the
+    whole panel, not per-name medians. FULL_RTH requires >= min_rth_minutes_full_day
+    unique market-level RTH timestamps and a final market minute of 15:59 ET.
+    Half-days ending ~12:59 and incomplete/outage days are HALF_OR_INCOMPLETE.
+    Per-name event eligibility separately requires 15:54–15:59 close-window bars.
+    Sparse names that do not trade every minute do not make a full market day incomplete.
 
 beta:
   window_trading_days: 20
@@ -58,6 +61,7 @@ market:
 
 rvol:
   lookback_completed_days: 20
+  min_prior_observations: 20
   window: close_clock_only
   baseline: prior_completed_days_same_instrument_same_close_window
   insufficient: null
@@ -82,6 +86,11 @@ CLOSE_DISLOCATION_REVERSAL_V1:
     negative discrepancy => LONG resolution.
   primary_outcome: next_open_to_15m
   diagnostic_outcomes: [close_to_next_open]
+  next_session_entry: rth_0930_bar_open_required
+  next_open_plus_5m_bar: '09:34'
+  next_open_plus_15m_bar: '09:44'
+  next_open_plus_30m_bar: '09:59'
+  missing_required_bar: null_ineligible
   execution_research_outcomes: [next_open_to_5m, next_open_to_15m, next_open_to_30m]
   executable_claim: false
   close_to_open_is_not_an_executable_fill: true

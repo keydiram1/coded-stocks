@@ -457,6 +457,7 @@ def discovery_campaign_v5(
         console.print(f"partitions D1={state['partitions']['D1']} D2={state['partitions']['D2']} D3={state['partitions']['D3']}")
         console.print(f"primary_outcome={state['primary_outcome']} trial_count={state['trial_count']}")
         console.print(f"sealed_oos={state['sealed_oos']}")
+        console.print(f"execution_status={state.get('execution_status')}")
         console.print(f"launch={state['launch_command']}")
         console.print("SIGNAL_ONLY. STOP. Default does not run research.")
         raise typer.Exit(code=0)

@@ -123,7 +123,72 @@ def test_d1_estimation_cannot_use_d2_days():
 
 def test_readiness_helper_matches_cli_contract():
     r = readiness_v5(Path("."))
-    for k in ("manifest_hash", "gates_hash", "data_manifest_hash", "git", "trial_count", "primary_outcome", "sealed_oos", "launch_command"):
+    for k in ("manifest_hash", "gates_hash", "data_manifest_hash", "git", "trial_count", "primary_outcome", "sealed_oos", "launch_command", "execution_status"):
         assert k in r
     assert r["partitions"]["D1"]["start"] == "2021-10-29"
     assert set(SPLIT_ORDER) == {"D1", "D2", "D3"}
+    assert r["execution_status"] == "NOT_APPROVED"
+
+
+def test_execute_refused_until_approved():
+    from quant_edge_lab.discovery.v5.runner import assert_execution_approved
+
+    man, gates = load_v5(Path("."))
+    try:
+        assert_execution_approved(man, gates)
+        raise AssertionError("execute must refuse NOT_APPROVED")
+    except RuntimeError as exc:
+        assert "refused" in str(exc)
+
+
+def test_interrupted_resume_matches_uninterrupted(tmp_path: Path):
+    from datetime import date, timedelta
+
+    import pytest
+
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+    from quant_edge_lab.discovery.v5.checkpoint import DayStore, InterruptAfter
+    from tests.unit.test_v5_close_dislocation import _close_day
+    import polars as pl
+
+    start = date(2024, 2, 1)
+    bars = {}
+    for i in range(8):
+        d = start + timedelta(days=i)
+        bars[d.isoformat()] = pl.concat(
+            [
+                _close_day(d, iid="a", ticker="A", last_step=0.01),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+    keys = sorted(bars)
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    ident = _ident()
+    store_u = DayStore(tmp_path, "unint", ident)
+    full, r_full = build_events_from_days(
+        keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store_u
+    )
+    store_i = DayStore(tmp_path, "intr", ident)
+    with pytest.raises(InterruptAfter):
+        build_events_from_days(
+            keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store_i, interrupt_after=3
+        )
+    resumed, r_res = build_events_from_days(
+        keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store_i
+    )
+    assert store_i.last_completed_day() == store_u.last_completed_day() == keys[-1]
+    bu = store_u.load_beta_history()
+    br = store_i.load_beta_history()
+    assert len(bu) == len(br)
+    for a, b in zip(bu, br, strict=True):
+        assert a.sort("instrument_id").to_dicts() == b.sort("instrument_id").to_dicts()
+    assert r_full == r_res
+    if full.height or resumed.height:
+        assert full.sort(["instrument_id", "trading_date"]).to_dicts() == resumed.sort(["instrument_id", "trading_date"]).to_dicts()

@@ -129,8 +129,8 @@ def attach_rvol(close_rows: pl.DataFrame, history: dict[str, list[tuple[str, flo
     rvols: list[float | None] = []
     for row in close_rows.iter_rows(named=True):
         iid = str(row["instrument_id"])
-        prior = [v for d, v in history.get(iid, []) if d < row["trading_date"]][-lookback:]
-        rvols.append(close_volume_rvol(row["close_window_volume"], prior))
+        prior = [v for d, v in history.get(iid, []) if d < row["trading_date"]]
+        rvols.append(close_volume_rvol(row["close_window_volume"], prior, min_prior=lookback))
     return close_rows.with_columns(pl.Series("close_volume_rvol", rvols, dtype=pl.Float64))
 
 
@@ -147,13 +147,29 @@ def update_rvol_history(
     return history
 
 
+def daily_panel_from_session(sess: pl.DataFrame) -> pl.DataFrame:
+    """Daily returns for beta from the completed session, independent of event eligibility."""
+    rth = rth_only(sess)
+    if rth.height == 0:
+        return pl.DataFrame()
+    rows: list[dict[str, Any]] = []
+    day = _day_str(rth)
+    for g in rth.partition_by("instrument_id", maintain_order=True):
+        px = g.sort("time_et")
+        if px.height < 2:
+            continue
+        dret = bar_return(float(px["close"][-1]), float(px["close"][0]))
+        if dret is None:
+            continue
+        rows.append({"instrument_id": str(g["instrument_id"][0]), "trading_date": day, "daily_ret": dret, "weight_mkt": 1.0})
+    if not rows:
+        return pl.DataFrame()
+    return loo_daily_market(pl.DataFrame(rows))
+
+
 def daily_panel_for_beta(close_rows: pl.DataFrame) -> pl.DataFrame:
-    df = close_rows.rename({"observed_value": "ret_5m"}).select(
-        ["instrument_id", "trading_date", "daily_ret"]
-    )
-    # beta.py daily_return_panel compounds ret_5m; we already have daily_ret.
-    out = df.rename({"daily_ret": "daily_ret"}).with_columns(pl.lit(1.0).alias("weight_mkt"))
-    return loo_daily_market(out)
+    df = close_rows.select(["instrument_id", "trading_date", "daily_ret"]).with_columns(pl.lit(1.0).alias("weight_mkt"))
+    return loo_daily_market(df)
 
 
 def next_day_outcomes(today_rth: pl.DataFrame, next_rth: pl.DataFrame | None) -> dict[str, float | None]:
@@ -258,54 +274,100 @@ def build_events_from_days(
     rvol_lookback: int = 20,
     min_rth_minutes: int = MIN_RTH_MINUTES,
     progress=None,
+    store=None,
+    interrupt_after: int | None = None,
 ) -> tuple[pl.DataFrame, dict[str, list[tuple[str, float]]]]:
-    """load_day(day)->bars; load_next(day)->next day bars or None. Causal beta/rvol state persisted in return."""
+    """Stream days. Beta/RVOL state updates after today's signal, including ineligible events."""
+    from quant_edge_lab.discovery.v5.checkpoint import InterruptAfter
+
     history_daily: list[pl.DataFrame] = []
     rvol_hist: dict[str, list[tuple[str, float]]] = {}
+    last = None
+    cum_events = 0
+    cum_rows = 0
+    if store is not None:
+        last = store.last_completed_day()
+        history_daily = store.load_beta_history()
+        rvol_hist = store.load_rvol()
+        cum_events, cum_rows = store.counters()
     parts: list[pl.DataFrame] = []
+    newly_completed = 0
     for i, day in enumerate(days):
+        if last is not None and day <= last:
+            continue
         bars = load_day(day)
-        if bars is None or (hasattr(bars, "height") and bars.height == 0):
-            if progress:
-                progress(i + 1, len(days), day, 0)
-            continue
-        close_rows = session_close_rows(bars, min_rth_minutes=min_rth_minutes)
-        if close_rows is None:
-            if progress:
-                progress(i + 1, len(days), day, 0)
-            continue
-        close_rows = attach_rvol(close_rows, rvol_hist, rvol_lookback)
-        beta_map = beta_from_history(history_daily, close_rows["instrument_id"].to_list())
-        close_rows = attach_expected(close_rows, beta_map)
-        close_rows = close_rows.filter(pl.col("beta_20d").is_not_null())
-        nxt = load_next(day)
-        sess = rth_only(with_session(bars))
-        nxt_by = {}
-        if nxt is not None and nxt.height:
-            ns = rth_only(with_session(nxt))
-            for g in ns.partition_by("instrument_id"):
-                nxt_by[str(g["instrument_id"][0])] = g
-        enriched = []
-        for g in sess.partition_by("instrument_id"):
-            iid = str(g["instrument_id"][0])
-            hit = close_rows.filter(pl.col("instrument_id") == iid)
-            if hit.height == 0:
-                continue
-            rec = hit.row(0, named=True)
-            if not eligible_for_event(rec):
-                continue
-            enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
-        if enriched:
-            parts.append(pl.DataFrame(enriched))
-        panel = daily_panel_for_beta(close_rows)
-        if panel.height:
-            history_daily.append(panel)
-            if len(history_daily) > BETA_WINDOW:
-                history_daily = history_daily[-BETA_WINDOW:]
-        update_rvol_history(rvol_hist, close_rows)
+        n_rows_today = int(bars.height) if bars is not None and hasattr(bars, "height") else 0
+        events_today = None
+        if bars is None or n_rows_today == 0:
+            panel = pl.DataFrame()
+            close_rows = None
+        else:
+            sess = with_session(bars)
+            kind = classify_trading_day(sess, min_rth_minutes=min_rth_minutes)
+            panel = daily_panel_from_session(sess) if kind == "FULL_RTH" else pl.DataFrame()
+            close_rows = session_close_rows(bars, min_rth_minutes=min_rth_minutes) if kind == "FULL_RTH" else None
+            if close_rows is not None:
+                close_rows = attach_rvol(close_rows, rvol_hist, rvol_lookback)
+                ids = close_rows["instrument_id"].to_list()
+                beta_map = beta_from_history(history_daily, [str(x) for x in ids])
+                close_rows = attach_expected(close_rows, beta_map)
+                nxt = load_next(day)
+                rth = rth_only(sess)
+                nxt_by: dict[str, pl.DataFrame] = {}
+                if nxt is not None and nxt.height:
+                    ns = rth_only(with_session(nxt))
+                    for g in ns.partition_by("instrument_id"):
+                        nxt_by[str(g["instrument_id"][0])] = g
+                    del nxt
+                    del ns
+                enriched = []
+                for g in rth.partition_by("instrument_id"):
+                    iid = str(g["instrument_id"][0])
+                    hit = close_rows.filter(pl.col("instrument_id") == iid)
+                    if hit.height == 0:
+                        continue
+                    rec = hit.row(0, named=True)
+                    if not eligible_for_event(rec):
+                        continue
+                    enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
+                if enriched:
+                    events_today = pl.DataFrame(enriched)
+                    parts.append(events_today)
+            if panel.height:
+                history_daily.append(panel)
+                if len(history_daily) > BETA_WINDOW:
+                    history_daily = history_daily[-BETA_WINDOW:]
+            if close_rows is not None:
+                update_rvol_history(rvol_hist, close_rows)
+            del bars
+        n_ev_today = int(events_today.height) if events_today is not None else 0
+        cum_events += n_ev_today
+        cum_rows += n_rows_today
+        if store is not None:
+            store.commit_day(
+                day,
+                beta_history=history_daily,
+                rvol_hist=rvol_hist,
+                events_today=events_today,
+                cumulative_events=cum_events,
+                cumulative_rows=cum_rows,
+            )
+        newly_completed += 1
         if progress:
-            n_ev = parts[-1].height if parts else 0
-            progress(i + 1, len(days), day, n_ev)
+            progress(
+                i + 1,
+                len(days),
+                day,
+                n_ev_today,
+                cumulative_events=cum_events,
+                cumulative_rows=cum_rows,
+                checkpoint_ok=store is not None,
+            )
+        if interrupt_after is not None and newly_completed >= interrupt_after:
+            raise InterruptAfter(day)
+    if store is not None:
+        ev = store.load_events()
+        return ev, rvol_hist
     if not parts:
         return pl.DataFrame(), rvol_hist
     return pl.concat(parts, how="diagonal_relaxed"), rvol_hist

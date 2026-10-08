@@ -182,6 +182,78 @@ def test_synthetic_positive_control_sign():
     assert signed_resolution(fwd, direction) > 0
 
 
+def test_sparse_instruments_do_not_make_full_market_day_incomplete():
+    d = date(2024, 6, 3)
+    liquid = session_minutes(d, (9, 30), 390, open_px=10.0, instrument_id="liq", ticker="LIQ")
+    sparse = _close_day(d, iid="s", ticker="S", last_step=0.01)
+    sess = with_session(pl.concat([liquid, sparse], how="diagonal_relaxed"))
+    assert classify_trading_day(sess, min_rth_minutes=380) == "FULL_RTH"
+
+
+def test_half_day_ending_1259_is_incomplete():
+    d = date(2024, 6, 3)
+    g = session_minutes(d, (9, 30), 210, open_px=10.0, instrument_id="a", ticker="A")
+    sess = with_session(g)
+    assert classify_trading_day(sess, min_rth_minutes=380) == "HALF_OR_INCOMPLETE"
+
+
+def test_incomplete_late_session_excluded():
+    d = date(2024, 6, 3)
+    g = session_minutes(d, (9, 30), 360, open_px=10.0, instrument_id="a", ticker="A")
+    sess = with_session(g)
+    assert classify_trading_day(sess, min_rth_minutes=380) == "HALF_OR_INCOMPLETE"
+
+
+def test_next_open_requires_0930_bar_not_first_later_trade():
+    from datetime import time as dtime
+
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import next_day_outcomes, rth_only
+
+    d0 = date(2024, 6, 3)
+    d1 = date(2024, 6, 4)
+    today = rth_only(with_session(_close_day(d0, iid="a", ticker="A", last_step=0.01)))
+    late = session_minutes(d1, (9, 47), 1, open_px=11.0, instrument_id="a", ticker="A")
+    close = _close_day(d1, iid="a", ticker="A", last_step=0.0, extra_open=False)
+    nxt = pl.concat([late, close])
+    outs = next_day_outcomes(today, nxt)
+    assert outs["next_open_to_15m"] is None
+    assert outs["close_to_next_open"] is None
+    assert dtime(9, 47) in set(with_session(nxt)["time_et"].to_list())
+
+
+def test_beta_history_bootstraps_without_event_eligibility():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+
+    start = date(2024, 1, 2)
+    bars: dict[str, pl.DataFrame] = {}
+    for i in range(21):
+        d = start + timedelta(days=i)
+        key = d.isoformat()
+        bars[key] = pl.concat(
+            [
+                _close_day(d, iid="a", ticker="A", last_step=0.01 + 0.0001 * i),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+    keys = sorted(bars)
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    ev, rvol = build_events_from_days(keys, load_day, load_next, rvol_lookback=20, min_rth_minutes=6)
+    last = keys[-1]
+    hit = ev.filter(pl.col("trading_date") == last) if ev.height else ev
+    assert hit.height > 0
+    assert hit["beta_20d"].drop_nulls().len() == hit.height
+    assert all(np.isfinite(x) for x in hit["beta_20d"].to_list())
+    assert hit["close_volume_rvol"].drop_nulls().len() == hit.height
+    assert last in {t[0] for t in rvol["a"]}
+
+
 def test_synthetic_negative_control_no_direction():
     rng = np.random.default_rng(0)
     signed = []

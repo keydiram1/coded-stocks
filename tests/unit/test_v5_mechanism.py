@@ -56,8 +56,9 @@ def test_loo_market_excludes_self():
     assert m[0] == pytest.approx(-0.05)
 
 
-def test_rvol_uses_prior_days_only():
-    assert close_volume_rvol(200.0, [100.0, 100.0]) == pytest.approx(2.0)
+def test_rvol_requires_twenty_prior_observations():
+    assert close_volume_rvol(200.0, [100.0] * 19) is None
+    assert close_volume_rvol(200.0, [100.0] * 20) == pytest.approx(2.0)
     assert close_volume_rvol(200.0, []) is None
 
 
