@@ -294,6 +294,38 @@ def apply_rule(events: pl.DataFrame, rule: CandidateRule) -> pl.DataFrame:
     )
 
 
+def rth_by_instrument(rth: pl.DataFrame) -> dict[str, pl.DataFrame]:
+    out: dict[str, pl.DataFrame] = {}
+    if rth.height == 0:
+        return out
+    for g in rth.partition_by("instrument_id", maintain_order=True):
+        out[str(g["instrument_id"][0])] = g
+    return out
+
+
+def enrich_close_events(
+    event_rows: pl.DataFrame,
+    *,
+    rth_by: dict[str, pl.DataFrame],
+    nxt_by: dict[str, pl.DataFrame],
+    today_eligible: set[str],
+) -> pl.DataFrame | None:
+    event_by_iid = {str(row["instrument_id"]): row for row in event_rows.iter_rows(named=True)}
+    enriched = []
+    for iid, g in rth_by.items():
+        if iid not in today_eligible:
+            continue
+        rec = event_by_iid.get(iid)
+        if rec is None:
+            continue
+        if not eligible_for_event(rec):
+            continue
+        enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
+    if not enriched:
+        return None
+    return pl.DataFrame(enriched)
+
+
 def eligible_for_event(row: dict[str, Any]) -> bool:
     if row.get("beta_20d") is None:
         return False
@@ -358,8 +390,8 @@ def build_events_from_days(
             rth = rth_only(sess)
             today_eligible: set[str] = set()
             if kind == "FULL_RTH":
-                for g in rth.partition_by("instrument_id"):
-                    iid = str(g["instrument_id"][0])
+                rth_by = rth_by_instrument(rth)
+                for iid, g in rth_by.items():
                     if not is_listed(iid, listed):
                         continue
                     if causal_ok(iid, day, elig_hist, cfg):
@@ -390,24 +422,16 @@ def build_events_from_days(
                     nxt_by: dict[str, pl.DataFrame] = {}
                     if nxt is not None and nxt.height:
                         ns = rth_only(with_session(nxt))
-                        for g in ns.partition_by("instrument_id"):
-                            nxt_by[str(g["instrument_id"][0])] = g
+                        nxt_by = rth_by_instrument(ns)
                         del nxt
                         del ns
-                    enriched = []
-                    for g in rth.partition_by("instrument_id"):
-                        iid = str(g["instrument_id"][0])
-                        if iid not in today_eligible:
-                            continue
-                        hit = event_rows.filter(pl.col("instrument_id") == iid)
-                        if hit.height == 0:
-                            continue
-                        rec = hit.row(0, named=True)
-                        if not eligible_for_event(rec):
-                            continue
-                        enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
-                    if enriched:
-                        events_today = pl.DataFrame(enriched)
+                    events_today = enrich_close_events(
+                        event_rows,
+                        rth_by=rth_by,
+                        nxt_by=nxt_by,
+                        today_eligible=today_eligible,
+                    )
+                    if events_today is not None:
                         parts.append(events_today)
                 if state_close is not None and state_close.height:
                     update_rvol_history(rvol_hist, state_close, rvol_lookback)
@@ -415,8 +439,7 @@ def build_events_from_days(
                     history_daily.append(panel)
                     if len(history_daily) > BETA_WINDOW:
                         history_daily = history_daily[-BETA_WINDOW:]
-                for g in rth.partition_by("instrument_id"):
-                    iid = str(g["instrument_id"][0])
+                for iid, g in rth_by.items():
                     if not is_listed(iid, listed):
                         continue
                     update_elig_hist(

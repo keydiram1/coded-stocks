@@ -145,20 +145,26 @@ class DayStore:
         rec = load_ckpt(self.root, self.run_id, "progress", self.ident) or {}
         return int(rec.get("cumulative_events") or 0), int(rec.get("cumulative_rows") or 0)
 
-    def _require_committed(self, last: str) -> Path:
-        cur = self._gen("current")
-        marker = cur / "day.txt"
+    def _generation_day(self, name: str) -> str | None:
+        marker = self._gen(name) / "day.txt"
         if not marker.exists():
-            raise ResumeIdentityError(f"missing committed day marker for {last}")
-        got = marker.read_text(encoding="utf-8").strip()
-        if got != last:
-            raise ResumeIdentityError(
-                f"committed state day={got} != progress last_completed_day={last}"
-            )
-        for name in STATE_FILES:
-            if not (cur / name).exists():
-                raise ResumeIdentityError(f"missing committed {name} for {last}")
-        return cur
+            return None
+        return marker.read_text(encoding="utf-8").strip()
+
+    def _require_committed(self, last: str) -> Path:
+        """Select current or previous whose day.txt exactly matches progress."""
+        ordered = ("current", "previous")
+        chosen: Path | None = None
+        for name in ordered:
+            if self._generation_day(name) == last:
+                chosen = self._gen(name)
+                break
+        if chosen is None:
+            raise ResumeIdentityError(f"no committed generation whose day marker is {last}")
+        for fname in STATE_FILES:
+            if not (chosen / fname).exists():
+                raise ResumeIdentityError(f"missing committed {fname} for {last}")
+        return chosen
 
     def _split_beta(self, df: pl.DataFrame) -> list[pl.DataFrame]:
         if df.height == 0 or "trading_date" not in df.columns:
@@ -272,6 +278,9 @@ class DayStore:
             atomic_write_parquet(part, events_today)
         if crash_after == "events":
             raise CrashAfter("events")
+        self._rotate_generations(pending)
+        if crash_after == "rotate":
+            raise CrashAfter("rotate")
         write_ckpt(
             self.root,
             self.run_id,
@@ -284,4 +293,5 @@ class DayStore:
             },
             self.ident,
         )
-        self._rotate_generations(pending)
+        if crash_after == "progress":
+            raise CrashAfter("progress")

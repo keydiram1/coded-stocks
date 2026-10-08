@@ -256,6 +256,65 @@ def test_d1_quantiles_ignore_later_days():
     assert r_all[0].dislocation_abs_min != r1[0].dislocation_abs_min
 
 
+def test_enrichment_lookup_matches_repeated_filter():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
+        attach_equal_weight_loo,
+        attach_expected,
+        attach_outcomes_for_instrument,
+        attach_rvol,
+        eligible_for_event,
+        enrich_close_events,
+        rth_by_instrument,
+        rth_only,
+        session_close_rows,
+    )
+
+    d0 = date(2024, 6, 3)
+    d1 = date(2024, 6, 4)
+    today = pl.concat(
+        [
+            _close_day(d0, iid="a", ticker="A", last_step=0.02),
+            _close_day(d0, iid="b", ticker="B", last_step=-0.01),
+            _close_day(d0, iid="c", ticker="C", last_step=0.00),
+        ]
+    )
+    nxt = pl.concat(
+        [
+            _close_day(d1, iid="a", ticker="A", last_step=0.0),
+            _close_day(d1, iid="b", ticker="B", last_step=0.0),
+            _close_day(d1, iid="c", ticker="C", last_step=0.0),
+        ]
+    )
+    rth = rth_only(with_session(today))
+    raw = session_close_rows(today, min_rth_minutes=6)
+    assert raw is not None
+    rows = attach_expected(
+        attach_rvol(attach_equal_weight_loo(raw), {}, 20),
+        {"a": 1.0, "b": 1.0, "c": 1.0},
+    )
+    eligible = {"a", "b", "c"}
+    rth_by = rth_by_instrument(rth)
+    nxt_by = rth_by_instrument(rth_only(with_session(nxt)))
+    got = enrich_close_events(rows, rth_by=rth_by, nxt_by=nxt_by, today_eligible=eligible)
+    naive = []
+    for g in rth.partition_by("instrument_id", maintain_order=True):
+        iid = str(g["instrument_id"][0])
+        if iid not in eligible:
+            continue
+        hit = rows.filter(pl.col("instrument_id") == iid)
+        if hit.height == 0:
+            continue
+        rec = hit.row(0, named=True)
+        if not eligible_for_event(rec):
+            continue
+        naive.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
+    assert got is not None
+    assert (
+        got.sort("instrument_id").to_dicts()
+        == pl.DataFrame(naive).sort("instrument_id").to_dicts()
+    )
+
+
 def test_synthetic_positive_control_sign():
     disc = 0.04
     fwd = -0.03

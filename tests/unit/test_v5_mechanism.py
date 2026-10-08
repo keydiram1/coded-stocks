@@ -158,3 +158,15 @@ def test_preflight_warmup_count_and_panel_end_guard():
     clipped = clip_to_panel(extra, frozen)
     assert clipped == ["2026-09-30", "2026-10-01"]
     assert next_session("2026-10-01", clipped, panel_end="2026-10-01") is None
+
+
+def test_preflight_duplicate_days_refuse_before_clip():
+    from quant_edge_lab.discovery.v5.preflight import CalendarError, validate_research_calendar
+
+    man, days = _mini_panel(n_warm=20)
+    duped = days + [days[5]]
+    try:
+        validate_research_calendar(duped, man, parquet_exists=lambda d: True)
+        raise AssertionError("duplicate trading days must refuse")
+    except CalendarError as exc:
+        assert "unique" in str(exc)

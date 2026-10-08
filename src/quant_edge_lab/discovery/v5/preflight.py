@@ -56,9 +56,10 @@ def validate_research_calendar(
 ) -> dict[str, Any]:
     start, end = panel_bounds(man)
     outside = [d for d in days if d < start or d > end]
-    ordered = clip_to_panel(days, man)
-    if len(ordered) != len(set(ordered)):
+    in_panel = [d for d in days if start <= d <= end]
+    if len(in_panel) != len(set(in_panel)):
         raise CalendarError("research calendar must be unique sorted trading days")
+    ordered = clip_to_panel(days, man)
     if not ordered:
         raise CalendarError("frozen panel calendar is empty")
     if ordered[0] != start or ordered[-1] != end:

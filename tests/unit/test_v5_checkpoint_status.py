@@ -268,7 +268,7 @@ def test_crash_before_progress_is_harmless(tmp_path: Path):
         keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store_u
     )
     crash_day = keys[1]
-    for point in ("events", "beta", "rvol"):
+    for point in ("beta", "rvol", "events", "rotate", "progress"):
         store = DayStore(tmp_path, f"crash-{point}", ident)
         with pytest.raises(CrashAfter):
             build_events_from_days(
@@ -281,6 +281,10 @@ def test_crash_before_progress_is_harmless(tmp_path: Path):
                 crash_after=point,
                 crash_day=crash_day,
             )
+        if point == "progress":
+            assert store.last_completed_day() == crash_day
+        else:
+            assert store.last_completed_day() == keys[0]
         resumed, r_res = build_events_from_days(
             keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store
         )
