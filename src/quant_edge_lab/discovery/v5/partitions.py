@@ -6,6 +6,8 @@ from datetime import date
 from typing import Any
 
 SEALED_OOS_STATE = "inaccessible"
+PANEL_START = "2021-10-01"
+PANEL_END = "2026-10-01"
 WARMUP_LAST_DAY = "2021-10-28"
 D1 = ("2021-10-29", "2023-10-17")
 D2 = ("2023-10-18", "2024-10-10")

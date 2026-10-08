@@ -83,6 +83,32 @@ def test_beta_window_constant_is_twenty():
     assert BETA_WINDOW == 20
 
 
+def _mini_panel(*, n_warm: int) -> tuple[dict, list[str]]:
+    from datetime import date, timedelta
+
+    d = date(2021, 10, 1)
+    days: list[str] = []
+    while len(days) < n_warm + 3 + 2 + 2:
+        if d.weekday() < 5:
+            days.append(d.isoformat())
+        d += timedelta(days=1)
+    warm = days[:n_warm]
+    d1 = days[n_warm : n_warm + 3]
+    d2 = days[n_warm + 3 : n_warm + 5]
+    d3 = days[n_warm + 5 : n_warm + 7]
+    man = {
+        "data": {"panel_start": days[0], "panel_end": days[-1]},
+        "splits": {
+            "warmup_last_day": warm[-1],
+            "D1": {"start": d1[0], "end": d1[-1], "n_days": 3},
+            "D2": {"start": d2[0], "end": d2[-1], "n_days": 2},
+            "D3": {"start": d3[0], "end": d3[-1], "n_days": 2},
+        },
+        "eligibility": {"warmup_trading_days": 20},
+    }
+    return man, days
+
+
 def test_preflight_complete_calendar_passes_and_gap_refuses():
     from quant_edge_lab.discovery.v5.preflight import (
         CalendarError,
@@ -90,31 +116,45 @@ def test_preflight_complete_calendar_passes_and_gap_refuses():
         validate_research_calendar,
     )
 
-    man = {
-        "splits": {
-            "D1": {"start": "2022-01-03", "end": "2022-01-05", "n_days": 3},
-            "D2": {"start": "2022-01-06", "end": "2022-01-07", "n_days": 2},
-            "D3": {"start": "2022-01-10", "end": "2022-01-11", "n_days": 2},
-        },
-        "eligibility": {"warmup_trading_days": 2},
-    }
-    days = [
-        "2021-12-30",
-        "2021-12-31",
-        "2022-01-03",
-        "2022-01-04",
-        "2022-01-05",
-        "2022-01-06",
-        "2022-01-07",
-        "2022-01-10",
-        "2022-01-11",
-    ]
+    man, days = _mini_panel(n_warm=20)
     rec = validate_research_calendar(days, man, parquet_exists=lambda d: True)
     assert rec["counts"]["D1"] == 3
-    assert next_session("2022-01-05", days) == "2022-01-06"
-    gap = [d for d in days if d != "2022-01-06"]
+    assert rec["first"] == man["data"]["panel_start"]
+    assert rec["last"] == man["data"]["panel_end"]
+    d1_end = man["splits"]["D1"]["end"]
+    assert next_session(d1_end, days, panel_end=man["data"]["panel_end"]) == man["splits"]["D2"][
+        "start"
+    ]
+    gap = [x for x in days if x != man["splits"]["D2"]["start"]]
     try:
         validate_research_calendar(gap, man, parquet_exists=lambda d: True)
         raise AssertionError("missing middle day must refuse")
     except CalendarError:
         pass
+
+
+def test_preflight_warmup_count_and_panel_end_guard():
+    from quant_edge_lab.discovery.v5.preflight import (
+        CalendarError,
+        clip_to_panel,
+        next_session,
+        validate_research_calendar,
+    )
+
+    man20, days20 = _mini_panel(n_warm=20)
+    validate_research_calendar(days20, man20, parquet_exists=lambda d: True)
+    man19, days19 = _mini_panel(n_warm=19)
+    try:
+        validate_research_calendar(days19, man19, parquet_exists=lambda d: True)
+        raise AssertionError("19 warmup days must refuse")
+    except CalendarError:
+        pass
+    frozen = {
+        "data": {"panel_start": "2021-10-01", "panel_end": "2026-10-01"},
+        "splits": {"warmup_last_day": "2021-10-28"},
+        "eligibility": {"warmup_trading_days": 20},
+    }
+    extra = ["2026-09-30", "2026-10-01", "2026-10-02"]
+    clipped = clip_to_panel(extra, frozen)
+    assert clipped == ["2026-09-30", "2026-10-01"]
+    assert next_session("2026-10-01", clipped, panel_end="2026-10-01") is None

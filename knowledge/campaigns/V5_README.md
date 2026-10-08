@@ -18,3 +18,8 @@ claim to isolate the official closing auction. Auction-specific research
 requires verified auction/official-close data. It is not claimed to be an edge.
 
 Options surface / local relative value is intentionally not coded here.
+
+`instruments.parquet` is not full session-dated listing history. That limitation
+is accepted for this first SIGNAL_ONLY campaign and is hashed into run identity.
+Any V5 survivor must be replicated with proper session-dated listing history
+before being considered trading-grade evidence.

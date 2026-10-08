@@ -16,6 +16,8 @@ note: >
 
 data:
   source: massive-flat minute bars only
+  panel_start: '2021-10-01'
+  panel_end: '2026-10-01'
   identity: hash of massive flatfiles minute_aggs_v1_manifest.json plus instruments.parquet
   no_download: [news, trades, quotes, NBBO, L2, L3, fundamentals, options_flatfiles]
   options_status: not_in_this_campaign_pending_s3_entitlement
@@ -59,7 +61,9 @@ eligibility:
     the same table V4 uses. That is not session-dated listing history. Execute
     hashes the file and refuses if it is absent. prev_close and trailing RTH
     dollar volume are causal from completed prior sessions. Event universe and
-    LOO market share this eligible set.
+    LOO market share this eligible set. Any V5 survivor must be replicated with
+    proper session-dated listing history before being considered trading-grade
+    evidence.
 
 beta:
   window_trading_days: 20

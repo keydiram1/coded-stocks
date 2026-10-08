@@ -45,14 +45,27 @@ def concentration(events: pl.DataFrame) -> dict[str, Any]:
     }
 
 
+def coerce_pvalue(p: object) -> float:
+    if p is None:
+        return 1.0
+    try:
+        x = float(p)
+    except (TypeError, ValueError):
+        return 1.0
+    if not np.isfinite(x):
+        return 1.0
+    return x
+
+
 def onesided_greater_p(daily_means: np.ndarray) -> float:
     arr = np.asarray(daily_means, dtype=float)
     arr = arr[np.isfinite(arr)]
     if arr.size < 8:
         return 1.0
+    if np.allclose(arr, arr[0]):
+        return 0.0 if float(arr[0]) > 0 else 1.0
     res = stats.ttest_1samp(arr, 0.0, alternative="greater")
-    p = float(res.pvalue)
-    return p if np.isfinite(p) else 1.0
+    return coerce_pvalue(res.pvalue)
 
 
 def signed_floor(gates: dict[str, Any], split: str) -> float:
@@ -207,7 +220,7 @@ def evaluate_frozen(
             n_boot=int(gates["inference"]["bootstrap_draws"]),
             seed=int(gates["inference"]["bootstrap_seed"]),
         )
-        pvals.append(float(st.get("p_one_sided") or 1.0))
+        pvals.append(coerce_pvalue(st.get("p_one_sided")))
         rows.append({"rule": rule, "stats": st, "trial_index": i})
 
     bh_map: dict[str, bool] = {}

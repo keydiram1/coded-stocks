@@ -31,6 +31,12 @@ from quant_edge_lab.discovery.v5.partitions import (
     filter_days,
     split_for_day,
 )
+from quant_edge_lab.discovery.v5.preflight import (
+    assert_in_frozen_panel,
+    clip_to_panel,
+    next_session,
+    panel_bounds,
+)
 from quant_edge_lab.discovery.v5.telemetry import StageClock, eta_seconds, percent, persist_snapshot
 
 DEFAULT_RUN_ID = "v5-close-dislocation"
@@ -106,18 +112,21 @@ def run_on_bars(
 ) -> dict[str, Any]:
     assert_sealed_oos_closed(man)
     camp = campaign_block(man)
-    ordered = _days_from_bars(bars_by_day)
+    _ps, pe = panel_bounds(man)
+    ordered = clip_to_panel(_days_from_bars(bars_by_day), man)
     clock = StageClock()
     store = DayStore(root, run_id, ident) if persist and root is not None else None
 
     def load_day(day: str) -> pl.DataFrame | None:
+        assert_in_frozen_panel(day, man)
         return bars_by_day.get(day)
 
     def load_next(day: str) -> pl.DataFrame | None:
-        i = ordered.index(day)
-        if i + 1 >= len(ordered):
+        nxt = next_session(day, ordered, panel_end=pe)
+        if nxt is None:
             return None
-        return bars_by_day.get(ordered[i + 1])
+        assert_in_frozen_panel(nxt, man)
+        return bars_by_day.get(nxt)
 
     def progress(
         done, total, day, n_ev, *, cumulative_events=0, cumulative_rows=0, checkpoint_ok=False
@@ -155,6 +164,8 @@ def run_on_bars(
         progress=progress if persist else None,
         store=store,
         interrupt_after=interrupt_after,
+        panel_start=_ps,
+        panel_end=pe,
     )
     return _finish_splits(events, ordered, man, gates, camp, ident, root, run_id, persist, clock)
 
@@ -278,9 +289,11 @@ def execute_v5(
     ident = freeze_v5(root)
     if ident["data_manifest"] == "MISSING" or ident.get("instruments") == "MISSING":
         raise ResumeIdentityError("data or instruments identity missing; refuse execute")
-    days = research_days(root)
+    _ps, pe = panel_bounds(man)
+    days = clip_to_panel(research_days(root), man)
 
     def exists(d: str) -> bool:
+        assert_in_frozen_panel(d, man)
         return local_parquet_path(root, d).exists()
 
     pf = validate_research_calendar(days, man, parquet_exists=exists)
@@ -291,15 +304,17 @@ def execute_v5(
     camp = campaign_block(man)
 
     def load_day(day: str) -> pl.DataFrame | None:
+        assert_in_frozen_panel(day, man)
         p = local_parquet_path(root, day)
         if not p.exists():
             return None
         return pl.read_parquet(p)
 
     def load_next(day: str) -> pl.DataFrame | None:
-        nxt = require_next_session_file(day, days, exists)
+        nxt = require_next_session_file(day, days, exists, panel_end=pe)
         if nxt is None:
             return None
+        assert_in_frozen_panel(nxt, man)
         return pl.read_parquet(local_parquet_path(root, nxt))
 
     def progress(
@@ -337,6 +352,8 @@ def execute_v5(
         interrupt_after=interrupt_after,
         instruments=inst,
         elig_cfg=cfg_from_manifest(man),
+        panel_start=_ps,
+        panel_end=pe,
     )
     out = _finish_splits(events, days, man, gates, camp, ident, root, run_id, True, clock)
     atomic_write_json(

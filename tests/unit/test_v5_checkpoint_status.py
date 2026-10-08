@@ -302,3 +302,87 @@ def test_crash_before_progress_is_harmless(tmp_path: Path):
                 full.sort(["instrument_id", "trading_date"]).to_dicts()
                 == resumed.sort(["instrument_id", "trading_date"]).to_dicts()
             )
+        assert not any(n.startswith("day=") for n in store.generation_names())
+        assert set(store_u.generation_names()) <= {"current", "previous"}
+
+
+def test_state_generations_are_bounded(tmp_path: Path):
+    from datetime import date, timedelta
+
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+    from quant_edge_lab.discovery.v5.checkpoint import DayStore
+    from tests.unit.test_v5_close_dislocation import _close_day
+
+    start = date(2024, 5, 1)
+    bars = {}
+    for i in range(6):
+        d = start + timedelta(days=i)
+        bars[d.isoformat()] = pl.concat(
+            [
+                _close_day(d, iid="a", ticker="A", last_step=0.01),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+    keys = sorted(bars)
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    store = DayStore(tmp_path, "gens", _ident())
+    build_events_from_days(
+        keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store
+    )
+    names = store.generation_names()
+    assert set(names) <= {"current", "previous"}
+    assert "current" in names
+    assert len(names) <= 2
+    assert not any(n.startswith("day=") for n in names)
+
+
+def test_missing_committed_state_refuses_resume(tmp_path: Path):
+    from datetime import date, timedelta
+
+    import pytest
+
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+    from quant_edge_lab.discovery.v5.checkpoint import DayStore
+    from quant_edge_lab.discovery.v5.identity import ResumeIdentityError
+    from tests.unit.test_v5_close_dislocation import _close_day
+
+    start = date(2024, 7, 1)
+    bars = {}
+    for i in range(3):
+        d = start + timedelta(days=i)
+        bars[d.isoformat()] = pl.concat(
+            [
+                _close_day(d, iid="a", ticker="A", last_step=0.01),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+    keys = sorted(bars)
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    for missing in ("beta_history.parquet", "rvol_state.json", "elig_state.json"):
+        store = DayStore(tmp_path, f"miss-{missing}", _ident())
+        build_events_from_days(
+            keys, load_day, load_next, min_rth_minutes=6, rvol_lookback=20, store=store
+        )
+        path = store._gen("current") / missing
+        path.unlink()
+        with pytest.raises(ResumeIdentityError, match="missing committed"):
+            if missing.startswith("beta"):
+                store.load_beta_history()
+            elif missing.startswith("rvol"):
+                store.load_rvol()
+            else:
+                store.load_elig()

@@ -5,12 +5,42 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from quant_edge_lab.discovery.v5.partitions import SPLIT_ORDER, WARMUP_LAST_DAY, filter_days
+from quant_edge_lab.discovery.v5.partitions import (
+    PANEL_END,
+    PANEL_START,
+    SPLIT_ORDER,
+    WARMUP_LAST_DAY,
+    filter_days,
+)
 from quant_edge_lab.hashing import sha256_json
 
 
 class CalendarError(RuntimeError):
     pass
+
+
+def panel_bounds(man: dict[str, Any]) -> tuple[str, str]:
+    data = man.get("data") or {}
+    return str(data.get("panel_start") or PANEL_START), str(data.get("panel_end") or PANEL_END)
+
+
+def warmup_end_day(man: dict[str, Any]) -> str:
+    return str((man.get("splits") or {}).get("warmup_last_day") or WARMUP_LAST_DAY)
+
+
+def warmup_n(man: dict[str, Any]) -> int:
+    return int((man.get("eligibility") or {}).get("warmup_trading_days") or 20)
+
+
+def clip_to_panel(days: list[str], man: dict[str, Any]) -> list[str]:
+    start, end = panel_bounds(man)
+    return sorted({d for d in days if start <= d <= end})
+
+
+def assert_in_frozen_panel(day: str, man: dict[str, Any]) -> None:
+    start, end = panel_bounds(man)
+    if day < start or day > end:
+        raise CalendarError(f"refusing to read {day} outside frozen panel {start}..{end}")
 
 
 def expected_counts(man: dict[str, Any]) -> dict[str, int]:
@@ -24,9 +54,17 @@ def validate_research_calendar(
     *,
     parquet_exists: Callable[[str], bool] | None = None,
 ) -> dict[str, Any]:
-    ordered = sorted(set(days))
-    if ordered != sorted(days):
+    start, end = panel_bounds(man)
+    outside = [d for d in days if d < start or d > end]
+    ordered = clip_to_panel(days, man)
+    if len(ordered) != len(set(ordered)):
         raise CalendarError("research calendar must be unique sorted trading days")
+    if not ordered:
+        raise CalendarError("frozen panel calendar is empty")
+    if ordered[0] != start or ordered[-1] != end:
+        raise CalendarError(
+            f"processed panel must equal {start}..{end}, got {ordered[0]}..{ordered[-1]}"
+        )
     counts = expected_counts(man)
     for split in SPLIT_ORDER:
         got = filter_days(ordered, split, man)
@@ -38,13 +76,16 @@ def validate_research_calendar(
             raise CalendarError(
                 f"{split} bounds drifted: got {got[:1]}..{got[-1:] if got else []} vs {a}..{b}"
             )
-    d1_start = man["splits"]["D1"]["start"]
-    warmup = [d for d in ordered if d <= WARMUP_LAST_DAY]
-    if not warmup or warmup[-1] != WARMUP_LAST_DAY:
-        # warmup_last_day must be present if it is a trading day in the panel design
-        before = [d for d in ordered if d < d1_start]
-        if len(before) < int(man.get("eligibility", {}).get("warmup_trading_days") or 20):
-            raise CalendarError("insufficient warmup trading days before D1")
+    warm_end = warmup_end_day(man)
+    need = warmup_n(man)
+    warmup = [d for d in ordered if d <= warm_end]
+    if len(warmup) < need:
+        raise CalendarError(f"need {need} warmup trading sessions before D1, got {len(warmup)}")
+    if not warmup or warmup[0] != start or warmup[-1] != warm_end:
+        raise CalendarError(
+            f"warmup must run {start}..{warm_end} ({need} sessions); "
+            f"got {(warmup[0] if warmup else None)}..{(warmup[-1] if warmup else None)}"
+        )
     if parquet_exists is not None:
         missing = [d for d in ordered if not parquet_exists(d)]
         if missing:
@@ -55,23 +96,33 @@ def validate_research_calendar(
         "calendar_hash": sha256_json(ordered),
         "first": ordered[0],
         "last": ordered[-1],
+        "panel_start": start,
+        "panel_end": end,
+        "ignored_outside_panel": outside,
     }
 
 
-def next_session(day: str, calendar: list[str]) -> str | None:
+def next_session(day: str, calendar: list[str], *, panel_end: str | None = None) -> str | None:
     ordered = sorted(calendar)
     if day not in ordered:
         raise CalendarError(f"{day} is not on the validated research calendar")
     i = ordered.index(day)
     if i + 1 >= len(ordered):
         return None
-    return ordered[i + 1]
+    nxt = ordered[i + 1]
+    if panel_end is not None and nxt > panel_end:
+        return None
+    return nxt
 
 
 def require_next_session_file(
-    day: str, calendar: list[str], parquet_exists: Callable[[str], bool]
+    day: str,
+    calendar: list[str],
+    parquet_exists: Callable[[str], bool],
+    *,
+    panel_end: str | None = None,
 ) -> str | None:
-    nxt = next_session(day, calendar)
+    nxt = next_session(day, calendar, panel_end=panel_end)
     if nxt is None:
         return None
     if not parquet_exists(nxt):

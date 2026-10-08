@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -108,8 +109,11 @@ class CrashAfter(RuntimeError):
     """Test hook: crash after a named artifact write, before progress advance."""
 
 
+STATE_FILES = ("beta_history.parquet", "rvol_state.json", "elig_state.json")
+
+
 class DayStore:
-    """Per-day immutable snapshots. Progress pointer advances only after all artifacts exist."""
+    """Two-generation committed state. Progress advances only after pending artifacts exist."""
 
     def __init__(self, root: Path, run_id: str, ident: dict[str, str]) -> None:
         self.root = root
@@ -120,9 +124,15 @@ class DayStore:
     def events_part(self, day: str) -> Path:
         return v5_run_dir(self.root, self.run_id) / "events" / f"date={day}" / "part.parquet"
 
-    def state_dir(self, day: str) -> Path:
-        p = ckpt_dir(self.root, self.run_id) / "state" / f"day={day}"
+    def _state_root(self) -> Path:
+        p = ckpt_dir(self.root, self.run_id) / "state"
         p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def _gen(self, name: str, *, create: bool = False) -> Path:
+        p = self._state_root() / name
+        if create:
+            p.mkdir(parents=True, exist_ok=True)
         return p
 
     def last_completed_day(self) -> str | None:
@@ -134,6 +144,21 @@ class DayStore:
     def counters(self) -> tuple[int, int]:
         rec = load_ckpt(self.root, self.run_id, "progress", self.ident) or {}
         return int(rec.get("cumulative_events") or 0), int(rec.get("cumulative_rows") or 0)
+
+    def _require_committed(self, last: str) -> Path:
+        cur = self._gen("current")
+        marker = cur / "day.txt"
+        if not marker.exists():
+            raise ResumeIdentityError(f"missing committed day marker for {last}")
+        got = marker.read_text(encoding="utf-8").strip()
+        if got != last:
+            raise ResumeIdentityError(
+                f"committed state day={got} != progress last_completed_day={last}"
+            )
+        for name in STATE_FILES:
+            if not (cur / name).exists():
+                raise ResumeIdentityError(f"missing committed {name} for {last}")
+        return cur
 
     def _split_beta(self, df: pl.DataFrame) -> list[pl.DataFrame]:
         if df.height == 0 or "trading_date" not in df.columns:
@@ -147,29 +172,33 @@ class DayStore:
         last = self.last_completed_day()
         if not last:
             return []
-        p = self.state_dir(last) / "beta_history.parquet"
-        if not p.exists():
-            return []
+        p = self._require_committed(last) / "beta_history.parquet"
         return self._split_beta(pl.read_parquet(p))
 
     def load_rvol(self) -> dict[str, list[tuple[str, float]]]:
         last = self.last_completed_day()
         if not last:
             return {}
-        p = self.state_dir(last) / "rvol_state.json"
-        if not p.exists():
-            return {}
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        p = self._require_committed(last) / "rvol_state.json"
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ResumeIdentityError(f"corrupt committed rvol_state for {last}") from exc
+        if not isinstance(raw, dict):
+            raise ResumeIdentityError(f"corrupt committed rvol_state for {last}")
         return {k: [(a, float(b)) for a, b in v] for k, v in raw.items()}
 
     def load_elig(self) -> dict[str, dict[str, list[tuple[str, float]]]]:
         last = self.last_completed_day()
         if not last:
             return {}
-        p = self.state_dir(last) / "elig_state.json"
-        if not p.exists():
-            return {}
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        p = self._require_committed(last) / "elig_state.json"
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ResumeIdentityError(f"corrupt committed elig_state for {last}") from exc
+        if not isinstance(raw, dict):
+            raise ResumeIdentityError(f"corrupt committed elig_state for {last}")
         out: dict[str, dict[str, list[tuple[str, float]]]] = {}
         for iid, rec in raw.items():
             out[iid] = {
@@ -192,6 +221,23 @@ class DayStore:
             return pl.DataFrame()
         return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed")
 
+    def generation_names(self) -> list[str]:
+        root = self._state_root()
+        return sorted(p.name for p in root.iterdir() if p.is_dir())
+
+    def _rotate_generations(self, pending: Path) -> None:
+        root = self._state_root()
+        prev = root / "previous"
+        cur = root / "current"
+        if prev.exists():
+            shutil.rmtree(prev)
+        if cur.exists():
+            cur.rename(prev)
+        pending.rename(root / "current")
+        for leftover in root.iterdir():
+            if leftover.is_dir() and leftover.name not in {"current", "previous"}:
+                shutil.rmtree(leftover)
+
     def commit_day(
         self,
         day: str,
@@ -207,24 +253,25 @@ class DayStore:
         prev = self.last_completed_day()
         if prev is not None and day <= prev:
             raise ResumeIdentityError(f"refusing double-write events for completed day {day}")
+        pending = self._gen("pending", create=True)
+        if beta_history:
+            atomic_write_parquet(
+                pending / "beta_history.parquet", pl.concat(beta_history, how="diagonal_relaxed")
+            )
+        else:
+            atomic_write_parquet(pending / "beta_history.parquet", pl.DataFrame())
+        if crash_after == "beta":
+            raise CrashAfter("beta")
+        atomic_write_json(pending / "rvol_state.json", rvol_hist)
+        if crash_after == "rvol":
+            raise CrashAfter("rvol")
+        atomic_write_json(pending / "elig_state.json", elig_hist or {})
+        (pending / "day.txt").write_text(day, encoding="utf-8")
         part = self.events_part(day)
         if events_today is not None and events_today.height:
             atomic_write_parquet(part, events_today)
         if crash_after == "events":
             raise CrashAfter("events")
-        snap = self.state_dir(day)
-        if beta_history:
-            atomic_write_parquet(
-                snap / "beta_history.parquet", pl.concat(beta_history, how="diagonal_relaxed")
-            )
-        else:
-            atomic_write_parquet(snap / "beta_history.parquet", pl.DataFrame())
-        if crash_after == "beta":
-            raise CrashAfter("beta")
-        atomic_write_json(snap / "rvol_state.json", rvol_hist)
-        if crash_after == "rvol":
-            raise CrashAfter("rvol")
-        atomic_write_json(snap / "elig_state.json", elig_hist or {})
         write_ckpt(
             self.root,
             self.run_id,
@@ -237,3 +284,4 @@ class DayStore:
             },
             self.ident,
         )
+        self._rotate_generations(pending)

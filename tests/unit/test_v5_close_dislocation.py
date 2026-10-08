@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 
 from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
+    attach_equal_weight_loo,
     freeze_rules_from_d1,
     session_close_rows,
 )
@@ -186,8 +187,9 @@ def test_leave_one_out_on_close_rows():
             _close_day(d, iid="c", ticker="C", last_step=-0.10),
         ]
     )
-    rows = session_close_rows(bars, min_rth_minutes=6)
-    assert rows is not None
+    raw = session_close_rows(bars, min_rth_minutes=6)
+    assert raw is not None
+    rows = attach_equal_weight_loo(raw)
     b = rows.filter(pl.col("instrument_id") == "b")["market_final_5m_loo"][0]
     assert b == pytest.approx(0.0, abs=1e-9)
 
@@ -301,7 +303,7 @@ def test_next_open_requires_0930_bar_not_first_later_trade():
     assert dtime(9, 47) in set(with_session(nxt)["time_et"].to_list())
 
 
-def test_etf_and_warrant_excluded_from_loo_and_events():
+def test_etf_and_warrant_cannot_contaminate_eligible_loo():
     from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
         daily_panel_from_session,
         session_close_rows,
@@ -309,25 +311,42 @@ def test_etf_and_warrant_excluded_from_loo_and_events():
     from quant_edge_lab.discovery.v5.eligibility import EligibilityConfig, listed_ids
 
     d = date(2024, 6, 3)
-    cs = _close_day(d, iid="cs1", ticker="CS", last_step=0.02)
+    a = _close_day(d, iid="a", ticker="A", last_step=0.02)
+    b = _close_day(d, iid="b", ticker="B", last_step=-0.01)
     etf = _close_day(d, iid="etf1", ticker="SPY", last_step=0.50)
-    warr = _close_day(d, iid="w1", ticker="WARR", last_step=0.50)
-    bars = pl.concat([cs, etf, warr])
+    warr = _close_day(d, iid="w1", ticker="WARR", last_step=-0.50)
+    clean = pl.concat([a, b])
+    dirty = pl.concat([a, b, etf, warr])
     inst = pl.DataFrame(
         {
-            "instrument_id": ["cs1", "etf1", "w1"],
-            "exchange": ["NASDAQ", "NYSE", "NASDAQ"],
-            "security_type": ["COMMON_STOCK", "ETF", "WARRANT"],
+            "instrument_id": ["a", "b", "etf1", "w1"],
+            "exchange": ["NASDAQ", "NYSE", "NYSE", "NASDAQ"],
+            "security_type": ["COMMON_STOCK", "COMMON_STOCK", "ETF", "WARRANT"],
         }
     )
-    listed = listed_ids(inst, EligibilityConfig())
-    assert listed == {"cs1"}
-    rows = session_close_rows(bars, min_rth_minutes=6)
-    assert rows is not None
-    rows = rows.filter(pl.col("instrument_id").is_in(sorted(listed)))
-    assert rows["instrument_id"].to_list() == ["cs1"]
-    panel = daily_panel_from_session(with_session(bars), listed)
-    assert set(panel["instrument_id"].to_list()) == {"cs1"}
+    eligible = listed_ids(inst, EligibilityConfig())
+    assert eligible == {"a", "b"}
+
+    def loo_map(bars: pl.DataFrame) -> dict[str, float]:
+        rows = session_close_rows(bars, min_rth_minutes=6)
+        assert rows is not None
+        rows = attach_equal_weight_loo(
+            rows.filter(pl.col("instrument_id").is_in(sorted(eligible)))
+        )
+        return {
+            str(r["instrument_id"]): float(r["market_final_5m_loo"])
+            for r in rows.iter_rows(named=True)
+        }
+
+    assert loo_map(clean) == loo_map(dirty)
+    panel_c = daily_panel_from_session(with_session(clean), eligible)
+    panel_d = daily_panel_from_session(with_session(dirty), eligible)
+    assert set(panel_c["instrument_id"].to_list()) == {"a", "b"}
+    assert set(panel_d["instrument_id"].to_list()) == {"a", "b"}
+    assert (
+        panel_c.sort("instrument_id")["daily_mkt_loo"].to_list()
+        == panel_d.sort("instrument_id")["daily_mkt_loo"].to_list()
+    )
 
 
 def test_beta_daily_requires_0930_open_and_1559_close():
@@ -403,6 +422,108 @@ def test_beta_history_bootstraps_without_event_eligibility():
     assert all(np.isfinite(x) for x in hit["beta_20d"].to_list())
     assert hit["close_volume_rvol"].drop_nulls().len() == hit.height
     assert last in {t[0] for t in rvol["a"]}
+
+
+def test_panel_end_file_is_never_read_as_next_session():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+    from quant_edge_lab.discovery.v5.preflight import clip_to_panel, next_session
+
+    panel_start = "2026-09-28"
+    panel_end = "2026-10-01"
+    man = {"data": {"panel_start": panel_start, "panel_end": panel_end}}
+    days = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"]
+    bars = {
+        d: pl.concat(
+            [
+                _close_day(date.fromisoformat(d), iid="a", ticker="A", last_step=0.01),
+                _close_day(date.fromisoformat(d), iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+        for d in days
+    }
+    clipped = clip_to_panel(days, man)
+    read: list[str] = []
+
+    def load_day(day: str):
+        if day > panel_end:
+            raise AssertionError(f"must not read {day}")
+        read.append(day)
+        return bars[day]
+
+    def load_next(day: str):
+        nxt = next_session(day, clipped, panel_end=panel_end)
+        if nxt is None:
+            return None
+        return load_day(nxt)
+
+    ev, _rvol = build_events_from_days(
+        days,
+        load_day,
+        load_next,
+        min_rth_minutes=6,
+        rvol_lookback=20,
+        panel_start=panel_start,
+        panel_end=panel_end,
+    )
+    assert "2026-10-02" not in read
+    assert clipped[0] == panel_start
+    assert clipped[-1] == panel_end
+    if ev.height:
+        assert ev["trading_date"].max() <= panel_end
+        assert ev["trading_date"].min() >= panel_start
+
+
+def test_twenty_warmup_days_make_first_d1_signal_eligible():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+    from quant_edge_lab.discovery.v5.eligibility import EligibilityConfig
+
+    start = date(2024, 1, 2)
+    bars: dict[str, pl.DataFrame] = {}
+    for i in range(21):
+        d = start + timedelta(days=i)
+        bars[d.isoformat()] = pl.concat(
+            [
+                _close_day(
+                    d, iid="a", ticker="A", last_step=0.01 + 0.0001 * i, volume=25_000.0
+                ),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01, volume=25_000.0),
+                _close_day(d, iid="etf1", ticker="SPY", last_step=0.50, volume=25_000.0),
+            ]
+        )
+    keys = sorted(bars)
+    inst = pl.DataFrame(
+        {
+            "instrument_id": ["a", "b", "etf1"],
+            "exchange": ["NASDAQ", "NYSE", "NYSE"],
+            "security_type": ["COMMON_STOCK", "COMMON_STOCK", "ETF"],
+        }
+    )
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    ev, rvol = build_events_from_days(
+        keys,
+        load_day,
+        load_next,
+        rvol_lookback=20,
+        min_rth_minutes=6,
+        instruments=inst,
+        elig_cfg=EligibilityConfig(),
+    )
+    first_d1 = keys[20]
+    hit = ev.filter(pl.col("trading_date") == first_d1)
+    assert hit.height > 0
+    assert set(hit["instrument_id"].to_list()) <= {"a", "b"}
+    assert "etf1" not in hit["instrument_id"].to_list()
+    assert hit["beta_20d"].drop_nulls().len() == hit.height
+    assert hit["close_volume_rvol"].drop_nulls().len() == hit.height
+    assert len(rvol["a"]) <= 20
+    assert len(rvol["a"]) >= 20
 
 
 def test_synthetic_negative_control_no_direction():

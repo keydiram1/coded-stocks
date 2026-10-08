@@ -2,7 +2,8 @@
 
 prev_close and 20d median RTH dollar volume are causal from completed prior sessions.
 instruments.parquet is the same last-available CS table V4 uses; it is not session-PIT listing
-history. That limitation is explicit. Execute refuses if the file is missing.
+history. That limitation is explicit. Execute refuses if the file is missing. Any V5 survivor
+must be replicated with session-dated listing history before trading-grade evidence.
 """
 
 from __future__ import annotations

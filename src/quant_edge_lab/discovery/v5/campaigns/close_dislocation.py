@@ -108,9 +108,19 @@ def session_close_rows(
         return None
     out = pl.DataFrame(rows)
     assert_no_future_columns_in_events(out)
-    rets = out["observed_value"].to_numpy().astype(float)
+    return out
+
+
+def attach_equal_weight_loo(close_rows: pl.DataFrame) -> pl.DataFrame:
+    """Equal-weight leave-one-out final-5m market on the provided universe only."""
+    if close_rows.height == 0:
+        return close_rows.with_columns(pl.Series("market_final_5m_loo", [], dtype=pl.Float64))
+    df = close_rows
+    if "market_final_5m_loo" in df.columns:
+        df = df.drop("market_final_5m_loo")
+    rets = df["observed_value"].to_numpy().astype(float)
     mkt = loo_cross_section(rets)
-    return out.with_columns(pl.Series("market_final_5m_loo", mkt))
+    return df.with_columns(pl.Series("market_final_5m_loo", mkt, dtype=pl.Float64))
 
 
 def attach_expected(close_rows: pl.DataFrame, beta_map: dict[str, float]) -> pl.DataFrame:
@@ -308,6 +318,8 @@ def build_events_from_days(
     crash_day: str | None = None,
     instruments: pl.DataFrame | None = None,
     elig_cfg: EligibilityConfig | None = None,
+    panel_start: str | None = None,
+    panel_end: str | None = None,
 ) -> tuple[pl.DataFrame, dict[str, list[tuple[str, float]]]]:
     """Stream days. Beta/RVOL/elig state updates after today's signal."""
     from quant_edge_lab.discovery.v5.checkpoint import InterruptAfter
@@ -331,6 +343,10 @@ def build_events_from_days(
     parts: list[pl.DataFrame] = []
     newly_completed = 0
     for i, day in enumerate(days):
+        if panel_start is not None and day < panel_start:
+            continue
+        if panel_end is not None and day > panel_end:
+            continue
         if last is not None and day <= last:
             continue
         bars = load_day(day)
@@ -348,19 +364,28 @@ def build_events_from_days(
                         continue
                     if causal_ok(iid, day, elig_hist, cfg):
                         today_eligible.add(iid)
-                panel = daily_panel_from_session(sess, today_eligible)
+                state_universe = listed
+                panel = daily_panel_from_session(sess, state_universe)
                 close_rows = session_close_rows(bars, min_rth_minutes=min_rth_minutes)
+                state_close = None
+                if close_rows is not None:
+                    if listed is not None:
+                        state_close = close_rows.filter(
+                            pl.col("instrument_id").is_in(sorted(listed))
+                        )
+                    else:
+                        state_close = close_rows
+                event_rows = None
                 if close_rows is not None and today_eligible:
-                    close_rows = close_rows.filter(
+                    event_rows = close_rows.filter(
                         pl.col("instrument_id").is_in(sorted(today_eligible))
                     )
-                elif close_rows is not None:
-                    close_rows = close_rows.head(0)
-                if close_rows is not None and close_rows.height:
-                    close_rows = attach_rvol(close_rows, rvol_hist, rvol_lookback)
-                    ids = close_rows["instrument_id"].to_list()
+                    event_rows = attach_equal_weight_loo(event_rows)
+                if event_rows is not None and event_rows.height:
+                    event_rows = attach_rvol(event_rows, rvol_hist, rvol_lookback)
+                    ids = event_rows["instrument_id"].to_list()
                     beta_map = beta_from_history(history_daily, [str(x) for x in ids])
-                    close_rows = attach_expected(close_rows, beta_map)
+                    event_rows = attach_expected(event_rows, beta_map)
                     nxt = load_next(day)
                     nxt_by: dict[str, pl.DataFrame] = {}
                     if nxt is not None and nxt.height:
@@ -374,7 +399,7 @@ def build_events_from_days(
                         iid = str(g["instrument_id"][0])
                         if iid not in today_eligible:
                             continue
-                        hit = close_rows.filter(pl.col("instrument_id") == iid)
+                        hit = event_rows.filter(pl.col("instrument_id") == iid)
                         if hit.height == 0:
                             continue
                         rec = hit.row(0, named=True)
@@ -384,7 +409,8 @@ def build_events_from_days(
                     if enriched:
                         events_today = pl.DataFrame(enriched)
                         parts.append(events_today)
-                    update_rvol_history(rvol_hist, close_rows, rvol_lookback)
+                if state_close is not None and state_close.height:
+                    update_rvol_history(rvol_hist, state_close, rvol_lookback)
                 if panel.height:
                     history_daily.append(panel)
                     if len(history_daily) > BETA_WINDOW:

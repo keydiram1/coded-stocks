@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -171,6 +172,20 @@ def test_d3_does_not_inspect_dead_d2():
         evaluate_frozen(ev, [_rule()], split="D3", gates=_gates(), d2_survivors=None)
     out = evaluate_frozen(ev, [_rule()], split="D3", gates=_gates(), d2_survivors=set())
     assert out == []
+
+
+def test_pvalue_zero_is_not_coerced_to_one():
+    from quant_edge_lab.discovery.v5.evaluation import coerce_pvalue, onesided_greater_p
+
+    assert coerce_pvalue(0.0) == 0.0
+    assert coerce_pvalue(None) == 1.0
+    p = onesided_greater_p(np.full(20, 0.002))
+    assert p == 0.0 or p < 1e-12
+    ev = _events(0.002, n=40)
+    rows = evaluate_frozen(ev, [_rule()], split="D2", gates=_gates())
+    assert rows[0]["stats"]["p_one_sided"] < 1e-12
+    assert rows[0]["stats"]["bh_rejected"] is True
+    assert rows[0]["decision"]["label"] == "ACTIVE"
 
 
 def test_d2_runs_bh_across_hypotheses():
