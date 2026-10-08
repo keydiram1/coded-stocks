@@ -13,7 +13,13 @@ from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
     build_events_from_days,
     freeze_rules_from_d1,
 )
-from quant_edge_lab.discovery.v5.checkpoint import DayStore, refuse_recompute_if_complete, require_resume_identity, v5_run_dir, write_ckpt
+from quant_edge_lab.discovery.v5.checkpoint import (
+    DayStore,
+    refuse_recompute_if_complete,
+    require_resume_identity,
+    v5_run_dir,
+    write_ckpt,
+)
 from quant_edge_lab.discovery.v5.evaluation import d2_survivor_ids, evaluate_frozen, trial_count
 from quant_edge_lab.discovery.v5.identity import ResumeIdentityError
 from quant_edge_lab.discovery.v5.manifest import campaign_block, freeze_v5, load_v5
@@ -32,10 +38,12 @@ APPROVED = frozenset({"APPROVED", "FROZEN"})
 
 
 def assert_execution_approved(man: dict[str, Any], gates: dict[str, Any]) -> None:
-    st = str(man.get("execution_status") or gates.get("execution_status") or "NOT_APPROVED")
-    if st not in APPROVED:
+    ms = str(man.get("execution_status") or "NOT_APPROVED")
+    gs = str(gates.get("execution_status") or "NOT_APPROVED")
+    if ms not in APPROVED or gs not in APPROVED:
         raise RuntimeError(
-            f"execute_v5 refused: execution_status={st} (need APPROVED or FROZEN). Independent review has not frozen this campaign."
+            f"execute_v5 refused: manifest.execution_status={ms} gates.execution_status={gs} "
+            "(both must be APPROVED or FROZEN)."
         )
 
 
@@ -111,7 +119,9 @@ def run_on_bars(
             return None
         return bars_by_day.get(ordered[i + 1])
 
-    def progress(done, total, day, n_ev, *, cumulative_events=0, cumulative_rows=0, checkpoint_ok=False):
+    def progress(
+        done, total, day, n_ev, *, cumulative_events=0, cumulative_rows=0, checkpoint_ok=False
+    ):
         if not persist or root is None:
             return
         sp = split_for_day(day, man)
@@ -164,7 +174,11 @@ def _finish_splits(
     d1_days = [d for d in ordered if split_for_day(d, man) == "D1"]
     assert_no_future_split_in_estimation("D1", d1_days, man)
     d1 = events.filter(pl.col("trading_date").is_in(d1_days)) if events.height else events
-    if persist and root is not None and refuse_recompute_if_complete(root, run_id, "d1_rules", ident):
+    if (
+        persist
+        and root is not None
+        and refuse_recompute_if_complete(root, run_id, "d1_rules", ident)
+    ):
         from quant_edge_lab.discovery.v5.checkpoint import load_ckpt
 
         rec = load_ckpt(root, run_id, "d1_rules", ident) or {}
@@ -172,7 +186,13 @@ def _finish_splits(
     else:
         rules = freeze_rules_from_d1(d1, camp)
         if persist and root is not None:
-            write_ckpt(root, run_id, "d1_rules", {"complete": True, "rules": [r.model_dump() for r in rules]}, ident)
+            write_ckpt(
+                root,
+                run_id,
+                "d1_rules",
+                {"complete": True, "rules": [r.model_dump() for r in rules]},
+                ident,
+            )
 
     results: dict[str, Any] = {
         "rules": [r.model_dump() for r in rules],
@@ -182,7 +202,11 @@ def _finish_splits(
     d2_means: dict[str, float] = {}
     survivors: set[str] = set()
     for split in SPLIT_ORDER:
-        if persist and root is not None and refuse_recompute_if_complete(root, run_id, f"{split.lower()}_eval", ident):
+        if (
+            persist
+            and root is not None
+            and refuse_recompute_if_complete(root, run_id, f"{split.lower()}_eval", ident)
+        ):
             from quant_edge_lab.discovery.v5.checkpoint import load_ckpt
 
             rec = load_ckpt(root, run_id, f"{split.lower()}_eval", ident) or {}
@@ -197,9 +221,12 @@ def _finish_splits(
                 gates=gates,
                 d2_means=d2_means,
                 d2_survivors=survivors if split == "D3" else None,
+                preregistered_trial_count=trial_count(camp),
             )
             if persist and root is not None:
-                write_ckpt(root, run_id, f"{split.lower()}_eval", {"complete": True, "rows": ev}, ident)
+                write_ckpt(
+                    root, run_id, f"{split.lower()}_eval", {"complete": True, "rows": ev}, ident
+                )
         results[split] = ev
         if split == "D2":
             survivors = d2_survivor_ids(ev)
@@ -230,18 +257,35 @@ def _finish_splits(
     return results
 
 
-def execute_v5(root: Path, *, run_id: str = DEFAULT_RUN_ID, interrupt_after: int | None = None) -> dict[str, Any]:
+def execute_v5(
+    root: Path, *, run_id: str = DEFAULT_RUN_ID, interrupt_after: int | None = None
+) -> dict[str, Any]:
     """Stream one parquet day at a time. Must not be called by default CLI."""
     from quant_edge_lab.data.massive.flatfiles import local_parquet_path
     from quant_edge_lab.discovery.campaign_v4 import research_days
+    from quant_edge_lab.discovery.v5.eligibility import cfg_from_manifest, instruments_path
+    from quant_edge_lab.discovery.v5.preflight import (
+        require_next_session_file,
+        validate_research_calendar,
+    )
 
     man, gates = load_v5(root)
     assert_execution_approved(man, gates)
+    inst_p = instruments_path(root)
+    if not inst_p.exists():
+        raise ResumeIdentityError("instruments.parquet missing; refuse execute")
+    inst = pl.read_parquet(inst_p)
     ident = freeze_v5(root)
-    if ident["data_manifest"] == "MISSING":
-        raise ResumeIdentityError("data manifest missing; refuse execute")
-    require_resume_identity(root, run_id, ident)
+    if ident["data_manifest"] == "MISSING" or ident.get("instruments") == "MISSING":
+        raise ResumeIdentityError("data or instruments identity missing; refuse execute")
     days = research_days(root)
+
+    def exists(d: str) -> bool:
+        return local_parquet_path(root, d).exists()
+
+    pf = validate_research_calendar(days, man, parquet_exists=exists)
+    ident = {**ident, "calendar": pf["calendar_hash"]}
+    require_resume_identity(root, run_id, ident)
     clock = StageClock()
     store = DayStore(root, run_id, ident)
     camp = campaign_block(man)
@@ -253,14 +297,14 @@ def execute_v5(root: Path, *, run_id: str = DEFAULT_RUN_ID, interrupt_after: int
         return pl.read_parquet(p)
 
     def load_next(day: str) -> pl.DataFrame | None:
-        i = days.index(day)
-        for nxt in days[i + 1 :]:
-            p = local_parquet_path(root, nxt)
-            if p.exists():
-                return pl.read_parquet(p)
-        return None
+        nxt = require_next_session_file(day, days, exists)
+        if nxt is None:
+            return None
+        return pl.read_parquet(local_parquet_path(root, nxt))
 
-    def progress(done, total, day, n_ev, *, cumulative_events=0, cumulative_rows=0, checkpoint_ok=False):
+    def progress(
+        done, total, day, n_ev, *, cumulative_events=0, cumulative_rows=0, checkpoint_ok=False
+    ):
         persist_snapshot(
             root,
             run_id,
@@ -291,13 +335,20 @@ def execute_v5(root: Path, *, run_id: str = DEFAULT_RUN_ID, interrupt_after: int
         progress=progress,
         store=store,
         interrupt_after=interrupt_after,
+        instruments=inst,
+        elig_cfg=cfg_from_manifest(man),
     )
     out = _finish_splits(events, days, man, gates, camp, ident, root, run_id, True, clock)
-    atomic_write_json(v5_run_dir(root, run_id) / "final.json", {**out, "identity": ident, "sealed_oos": "inaccessible"})
+    atomic_write_json(
+        v5_run_dir(root, run_id) / "final.json",
+        {**out, "identity": ident, "sealed_oos": "inaccessible"},
+    )
     return out
 
 
-def run_campaign_v5(root: Path, *, execute: bool = False, run_id: str = DEFAULT_RUN_ID) -> dict[str, Any]:
+def run_campaign_v5(
+    root: Path, *, execute: bool = False, run_id: str = DEFAULT_RUN_ID
+) -> dict[str, Any]:
     if not execute:
         return readiness_v5(root)
     return execute_v5(root, run_id=run_id)

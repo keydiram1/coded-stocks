@@ -104,8 +104,8 @@ from a pretty equity curve. The deterministic engine is the authority.
 - **Feature ≠ phenomenon ≠ edge.** A split in a tree is not a mechanism.
 - V5 is mechanism-first: expected vs observed vs discrepancy vs directional
   resolution vs falsification. First executable campaign is
-  `CLOSE_DISLOCATION_REVERSAL_V1` (forced end-of-day flow / auction dislocation
-  on equity minute bars). HYPOTHESIS only — not known to work.
+  `CLOSE_DISLOCATION_REVERSAL_V1` (pre-close/end-of-day forced-flow dislocation
+  on equity minute bars; not an official-auction claim). HYPOTHESIS only.
 - Options Local Relative Value is a high-priority *future* V5 campaign after
   Options Flat Files ingest is unblocked. Not implemented in the V5 code branch.
 - Minute-bar results remain SIGNAL_ONLY.

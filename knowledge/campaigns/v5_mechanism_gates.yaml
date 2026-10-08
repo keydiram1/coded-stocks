@@ -28,8 +28,9 @@ d3:
   rescue: false
   require_sign_match_d2: true
   note: >
-    mean <= 0 => KILL. 0 < mean < 12bp may be VALIDATED_SUBTHRESHOLD_PHENOMENON
-    only if other gates pass. mean >= +12bp may be RESEARCH_PASS only if all gates pass.
+    mean <= 0 => KILL direction_failed. not D3 BH survivor => KILL d3_not_significant.
+    BH survivor and 0 < mean < +12bp => VALIDATED_SUBTHRESHOLD_PHENOMENON.
+    BH survivor and mean >= +12bp => RESEARCH_PASS.
 
 sample:
   min_ticker_days: 750

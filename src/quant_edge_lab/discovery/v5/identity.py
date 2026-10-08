@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from quant_edge_lab.data.massive.flatfiles import manifest_path
+from quant_edge_lab.discovery.v5.eligibility import instruments_identity
 from quant_edge_lab.hashing import git_sha, sha256_file, sha256_json
 
 SCIENCE_ID = "v5_mechanism_expected_observed_discrepancy_v1"
@@ -30,6 +31,8 @@ def identity_blob(
     git: str,
     data_manifest_hash: str,
     science: str = SCIENCE_ID,
+    instruments_hash: str = "MISSING",
+    calendar_hash: str = "UNSET",
 ) -> dict[str, str]:
     return {
         "manifest": manifest_hash,
@@ -37,6 +40,8 @@ def identity_blob(
         "git": git,
         "data_manifest": data_manifest_hash,
         "science": science,
+        "instruments": instruments_hash,
+        "calendar": calendar_hash,
     }
 
 
@@ -46,6 +51,7 @@ def build_identity(root: Path, *, manifest_hash: str, gates_hash: str) -> dict[s
         gates_hash=gates_hash,
         git=git_sha(root),
         data_manifest_hash=data_manifest_identity(root),
+        instruments_hash=instruments_identity(root),
     )
 
 
@@ -57,9 +63,8 @@ def assert_identity_match(stored: dict[str, Any], required: dict[str, str]) -> N
     have = {k: got.get(k) for k in required}
     if have != need:
         if have.get("data_manifest") != need.get("data_manifest"):
-            raise ResumeIdentityError(
-                f"data-manifest mismatch stored={have.get('data_manifest')} required={need.get('data_manifest')}"
-            )
+            stored_m, need_m = have.get("data_manifest"), need.get("data_manifest")
+            raise ResumeIdentityError(f"data-manifest mismatch stored={stored_m} required={need_m}")
         raise ResumeIdentityError(f"checkpoint identity mismatch stored={have} required={need}")
 
 

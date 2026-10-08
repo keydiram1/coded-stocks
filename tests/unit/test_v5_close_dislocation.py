@@ -7,9 +7,21 @@ import numpy as np
 import polars as pl
 import pytest
 
-from quant_edge_lab.discovery.v5.campaigns.close_dislocation import freeze_rules_from_d1, session_close_rows
-from quant_edge_lab.discovery.v5.campaigns.close_features import discrepancy, resolution_direction, signed_resolution
-from quant_edge_lab.discovery.v5.session import classify_trading_day, has_close_window, no_overnight_in_close_window, with_session
+from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
+    freeze_rules_from_d1,
+    session_close_rows,
+)
+from quant_edge_lab.discovery.v5.campaigns.close_features import (
+    discrepancy,
+    resolution_direction,
+    signed_resolution,
+)
+from quant_edge_lab.discovery.v5.session import (
+    classify_trading_day,
+    has_close_window,
+    no_overnight_in_close_window,
+    with_session,
+)
 from quant_edge_lab.features.v4r.beta import beta_from_history
 from quant_edge_lab.validation.leakage import future_poison
 from tests.fixtures.bars import bars_from_et, session_minutes
@@ -18,13 +30,65 @@ ET = ZoneInfo("America/New_York")
 CLOSE_TIMES = [(15, 54), (15, 55), (15, 56), (15, 57), (15, 58), (15, 59)]
 
 
-def _close_day(day: date, *, iid: str, ticker: str, last_step: float, volume: float = 1000.0, extra_open: bool = True) -> pl.DataFrame:
+def _close_day(
+    day: date,
+    *,
+    iid: str,
+    ticker: str,
+    last_step: float,
+    volume: float = 1000.0,
+    extra_open: bool = True,
+) -> pl.DataFrame:
     parts = []
     if extra_open:
-        parts.append(session_minutes(day, (9, 30), 1, open_px=10.0, close_step=0.0, volume=volume, instrument_id=iid, ticker=ticker))
-        parts.append(session_minutes(day, (9, 34), 1, open_px=10.0, close_step=0.0, volume=100.0, instrument_id=iid, ticker=ticker))
-        parts.append(session_minutes(day, (9, 44), 1, open_px=10.0, close_step=0.0, volume=100.0, instrument_id=iid, ticker=ticker))
-        parts.append(session_minutes(day, (9, 59), 1, open_px=10.0, close_step=0.0, volume=100.0, instrument_id=iid, ticker=ticker))
+        parts.append(
+            session_minutes(
+                day,
+                (9, 30),
+                1,
+                open_px=10.0,
+                close_step=0.0,
+                volume=volume,
+                instrument_id=iid,
+                ticker=ticker,
+            )
+        )
+        parts.append(
+            session_minutes(
+                day,
+                (9, 34),
+                1,
+                open_px=10.0,
+                close_step=0.0,
+                volume=100.0,
+                instrument_id=iid,
+                ticker=ticker,
+            )
+        )
+        parts.append(
+            session_minutes(
+                day,
+                (9, 44),
+                1,
+                open_px=10.0,
+                close_step=0.0,
+                volume=100.0,
+                instrument_id=iid,
+                ticker=ticker,
+            )
+        )
+        parts.append(
+            session_minutes(
+                day,
+                (9, 59),
+                1,
+                open_px=10.0,
+                close_step=0.0,
+                volume=100.0,
+                instrument_id=iid,
+                ticker=ticker,
+            )
+        )
     px = 10.0
     rows = []
     for h, m in CLOSE_TIMES:
@@ -43,7 +107,12 @@ def test_close_window_and_no_overnight_wrap():
     g = with_session(_close_day(d, iid="a", ticker="A", last_step=0.01))
     assert has_close_window(g)
     assert no_overnight_in_close_window(g)
-    wrap = g.with_columns(pl.when(pl.col("time_et").dt.hour() == 15).then(pl.date(2024, 6, 4)).otherwise(pl.col("session_date")).alias("session_date"))
+    wrap = g.with_columns(
+        pl.when(pl.col("time_et").dt.hour() == 15)
+        .then(pl.date(2024, 6, 4))
+        .otherwise(pl.col("session_date"))
+        .alias("session_date")
+    )
     close_w = wrap.filter(pl.col("time_et").dt.hour() >= 15)
     assert close_w["session_date"].n_unique() == 1 or not no_overnight_in_close_window(wrap)
     mixed = wrap
@@ -68,7 +137,10 @@ def test_final_5m_uses_1554_to_1559_same_session():
 
 
 def test_next_session_mapping_columns_exist_after_attach():
-    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import attach_outcomes_for_instrument, rth_only
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
+        attach_outcomes_for_instrument,
+        rth_only,
+    )
 
     d0 = date(2024, 6, 3)
     d1 = date(2024, 6, 4)
@@ -92,7 +164,7 @@ def test_causal_beta_prior_days_only():
             {
                 "instrument_id": ["a", "b"],
                 "daily_ret": [0.01 * (i + 1), -0.01],
-                "daily_mkt_loo": [0.005, 0.005],
+                "daily_mkt_loo": [0.002 * (i + 1), 0.001 * (i - 5)],
             }
         )
         days.append(df)
@@ -123,8 +195,10 @@ def test_leave_one_out_on_close_rows():
 def test_future_poison_cannot_alter_todays_event():
     d = date(2024, 6, 3)
     rth = _close_day(d, iid="a", ticker="A", last_step=0.03)
-    ah = session_minutes(d, (16, 5), 3, open_px=10.0, close_step=0.5, volume=9999, instrument_id="a", ticker="A")
-    bars = pl.concat([rth, ah])
+    ah = session_minutes(
+        d, (16, 5), 3, open_px=10.0, close_step=0.5, volume=9999, instrument_id="a", ticker="A"
+    )
+    bars = pl.concat([rth, ah], how="diagonal_relaxed")
     rows = session_close_rows(bars, min_rth_minutes=6)
     last_ts = with_session(rth).sort("time_et")["ts_utc"][-1]
     poisoned = future_poison(bars, last_ts, factor=50.0)
@@ -165,7 +239,13 @@ def test_d1_quantiles_ignore_later_days():
     camp = {
         "primary_outcome": "next_open_to_15m",
         "hypotheses": [
-            {"hypothesis_id": "H1_PRIMARY", "role": "primary", "dislocation_abs_quantile": 0.9, "rvol_min_quantile": 0.8, "require_rvol": True}
+            {
+                "hypothesis_id": "H1_PRIMARY",
+                "role": "primary",
+                "dislocation_abs_quantile": 0.9,
+                "rvol_min_quantile": 0.8,
+                "require_rvol": True,
+            }
         ],
     }
     r1 = freeze_rules_from_d1(d1, camp)
@@ -214,11 +294,80 @@ def test_next_open_requires_0930_bar_not_first_later_trade():
     today = rth_only(with_session(_close_day(d0, iid="a", ticker="A", last_step=0.01)))
     late = session_minutes(d1, (9, 47), 1, open_px=11.0, instrument_id="a", ticker="A")
     close = _close_day(d1, iid="a", ticker="A", last_step=0.0, extra_open=False)
-    nxt = pl.concat([late, close])
+    nxt = pl.concat([late, close], how="diagonal_relaxed")
     outs = next_day_outcomes(today, nxt)
     assert outs["next_open_to_15m"] is None
     assert outs["close_to_next_open"] is None
     assert dtime(9, 47) in set(with_session(nxt)["time_et"].to_list())
+
+
+def test_etf_and_warrant_excluded_from_loo_and_events():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import (
+        daily_panel_from_session,
+        session_close_rows,
+    )
+    from quant_edge_lab.discovery.v5.eligibility import EligibilityConfig, listed_ids
+
+    d = date(2024, 6, 3)
+    cs = _close_day(d, iid="cs1", ticker="CS", last_step=0.02)
+    etf = _close_day(d, iid="etf1", ticker="SPY", last_step=0.50)
+    warr = _close_day(d, iid="w1", ticker="WARR", last_step=0.50)
+    bars = pl.concat([cs, etf, warr])
+    inst = pl.DataFrame(
+        {
+            "instrument_id": ["cs1", "etf1", "w1"],
+            "exchange": ["NASDAQ", "NYSE", "NASDAQ"],
+            "security_type": ["COMMON_STOCK", "ETF", "WARRANT"],
+        }
+    )
+    listed = listed_ids(inst, EligibilityConfig())
+    assert listed == {"cs1"}
+    rows = session_close_rows(bars, min_rth_minutes=6)
+    assert rows is not None
+    rows = rows.filter(pl.col("instrument_id").is_in(sorted(listed)))
+    assert rows["instrument_id"].to_list() == ["cs1"]
+    panel = daily_panel_from_session(with_session(bars), listed)
+    assert set(panel["instrument_id"].to_list()) == {"cs1"}
+
+
+def test_beta_daily_requires_0930_open_and_1559_close():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import daily_panel_from_session
+
+    d = date(2024, 6, 3)
+    full = _close_day(d, iid="a", ticker="A", last_step=0.02)
+    sparse = _close_day(d, iid="b", ticker="B", last_step=0.02, extra_open=False)
+    panel = daily_panel_from_session(with_session(pl.concat([full, sparse])), {"a", "b"})
+    assert panel["instrument_id"].to_list() == ["a"]
+    # 09:30 open 10.0, 15:59 close 10*1.02
+    assert panel["daily_ret"][0] == pytest.approx(0.02, abs=1e-9)
+
+
+def test_rvol_state_truncated_to_lookback():
+    from quant_edge_lab.discovery.v5.campaigns.close_dislocation import build_events_from_days
+
+    start = date(2024, 4, 1)
+    bars: dict[str, pl.DataFrame] = {}
+    for i in range(30):
+        d = start + timedelta(days=i)
+        bars[d.isoformat()] = pl.concat(
+            [
+                _close_day(d, iid="a", ticker="A", last_step=0.01),
+                _close_day(d, iid="b", ticker="B", last_step=-0.01),
+            ]
+        )
+    keys = sorted(bars)
+
+    def load_day(day: str):
+        return bars[day]
+
+    def load_next(day: str):
+        i = keys.index(day)
+        return bars[keys[i + 1]] if i + 1 < len(keys) else None
+
+    _ev, rvol = build_events_from_days(
+        keys, load_day, load_next, rvol_lookback=20, min_rth_minutes=6
+    )
+    assert max(len(v) for v in rvol.values()) <= 20
 
 
 def test_beta_history_bootstraps_without_event_eligibility():
@@ -244,7 +393,9 @@ def test_beta_history_bootstraps_without_event_eligibility():
         i = keys.index(day)
         return bars[keys[i + 1]] if i + 1 < len(keys) else None
 
-    ev, rvol = build_events_from_days(keys, load_day, load_next, rvol_lookback=20, min_rth_minutes=6)
+    ev, rvol = build_events_from_days(
+        keys, load_day, load_next, rvol_lookback=20, min_rth_minutes=6
+    )
     last = keys[-1]
     hit = ev.filter(pl.col("trading_date") == last) if ev.height else ev
     assert hit.height > 0

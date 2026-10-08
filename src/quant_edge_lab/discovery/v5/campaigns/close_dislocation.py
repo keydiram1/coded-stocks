@@ -19,18 +19,31 @@ from quant_edge_lab.discovery.v5.campaigns.close_features import (
     loo_cross_section,
     loo_daily_market,
     pick_bar_close,
+    pick_bar_open,
     pick_close_px,
     pick_open,
     pick_window_volume,
     resolution_direction,
     signed_resolution,
 )
-from quant_edge_lab.discovery.v5.causality import assert_available_le_decision, assert_no_future_columns_in_events
+from quant_edge_lab.discovery.v5.causality import (
+    assert_available_le_decision,
+    assert_no_future_columns_in_events,
+)
+from quant_edge_lab.discovery.v5.eligibility import (
+    EligibilityConfig,
+    causal_ok,
+    is_listed,
+    listed_ids,
+    rth_dollar_volume,
+    update_elig_hist,
+)
 from quant_edge_lab.discovery.v5.models import CandidateRule
 from quant_edge_lab.discovery.v5.session import (
     CLOSE_ANCHOR,
     CLOSE_LAST,
     MIN_RTH_MINUTES,
+    RTH_OPEN,
     classify_trading_day,
     has_close_window,
     no_overnight_in_close_window,
@@ -39,7 +52,7 @@ from quant_edge_lab.discovery.v5.session import (
 )
 
 CAMPAIGN_ID = "CLOSE_DISLOCATION_REVERSAL_V1"
-MECHANISM_ID = "forced_eod_auction_flow"
+MECHANISM_ID = "forced_eod_preclose_flow"
 
 
 def _day_str(sessioned: pl.DataFrame) -> str:
@@ -75,11 +88,9 @@ def session_close_rows(
         assert_available_le_decision(_avail(last_ts), decision, label="close_bar")
         obs = bar_return(pick_bar_close(g, CLOSE_LAST), pick_bar_close(g, CLOSE_ANCHOR))
         vol = pick_window_volume(g)
-        daily = g.filter(pl.col("is_rth"))
-        dret = None
-        if daily.height:
-            px = daily.sort("time_et")
-            dret = bar_return(float(px["close"][-1]), float(px["close"][0]))
+        o930 = pick_bar_open(g, RTH_OPEN)
+        c1559 = pick_bar_close(g, CLOSE_LAST)
+        dret = bar_return(c1559, o930) if o930 is not None and c1559 is not None else None
         rows.append(
             {
                 "instrument_id": str(g["instrument_id"][0]),
@@ -125,7 +136,9 @@ def attach_expected(close_rows: pl.DataFrame, beta_map: dict[str, float]) -> pl.
     )
 
 
-def attach_rvol(close_rows: pl.DataFrame, history: dict[str, list[tuple[str, float]]], lookback: int) -> pl.DataFrame:
+def attach_rvol(
+    close_rows: pl.DataFrame, history: dict[str, list[tuple[str, float]]], lookback: int
+) -> pl.DataFrame:
     rvols: list[float | None] = []
     for row in close_rows.iter_rows(named=True):
         iid = str(row["instrument_id"])
@@ -137,42 +150,55 @@ def attach_rvol(close_rows: pl.DataFrame, history: dict[str, list[tuple[str, flo
 def update_rvol_history(
     history: dict[str, list[tuple[str, float]]],
     close_rows: pl.DataFrame,
+    lookback: int = 20,
 ) -> dict[str, list[tuple[str, float]]]:
     for row in close_rows.iter_rows(named=True):
         vol = row["close_window_volume"]
         if vol is None:
             continue
         iid = str(row["instrument_id"])
-        history.setdefault(iid, []).append((row["trading_date"], float(vol)))
+        hist = history.setdefault(iid, [])
+        hist.append((row["trading_date"], float(vol)))
+        history[iid] = hist[-lookback:]
     return history
 
 
-def daily_panel_from_session(sess: pl.DataFrame) -> pl.DataFrame:
-    """Daily returns for beta from the completed session, independent of event eligibility."""
+def daily_panel_from_session(sess: pl.DataFrame, eligible: set[str] | None = None) -> pl.DataFrame:
+    """Beta daily return: 09:30 RTH open → 15:59 RTH close. Both bars required."""
     rth = rth_only(sess)
     if rth.height == 0:
         return pl.DataFrame()
     rows: list[dict[str, Any]] = []
     day = _day_str(rth)
     for g in rth.partition_by("instrument_id", maintain_order=True):
-        px = g.sort("time_et")
-        if px.height < 2:
+        iid = str(g["instrument_id"][0])
+        if eligible is not None and iid not in eligible:
             continue
-        dret = bar_return(float(px["close"][-1]), float(px["close"][0]))
+        o = pick_bar_open(g, RTH_OPEN)
+        c = pick_bar_close(g, CLOSE_LAST)
+        if o is None or c is None:
+            continue
+        dret = bar_return(c, o)
         if dret is None:
             continue
-        rows.append({"instrument_id": str(g["instrument_id"][0]), "trading_date": day, "daily_ret": dret, "weight_mkt": 1.0})
+        rows.append(
+            {"instrument_id": iid, "trading_date": day, "daily_ret": dret, "weight_mkt": 1.0}
+        )
     if not rows:
         return pl.DataFrame()
     return loo_daily_market(pl.DataFrame(rows))
 
 
 def daily_panel_for_beta(close_rows: pl.DataFrame) -> pl.DataFrame:
-    df = close_rows.select(["instrument_id", "trading_date", "daily_ret"]).with_columns(pl.lit(1.0).alias("weight_mkt"))
+    df = close_rows.select(["instrument_id", "trading_date", "daily_ret"]).with_columns(
+        pl.lit(1.0).alias("weight_mkt")
+    )
     return loo_daily_market(df)
 
 
-def next_day_outcomes(today_rth: pl.DataFrame, next_rth: pl.DataFrame | None) -> dict[str, float | None]:
+def next_day_outcomes(
+    today_rth: pl.DataFrame, next_rth: pl.DataFrame | None
+) -> dict[str, float | None]:
     close = pick_close_px(today_rth)
     if next_rth is None or next_rth.height == 0:
         return {
@@ -219,7 +245,9 @@ def d1_quantile(values: list[float], q: float) -> float | None:
     return float(np.nanquantile(arr, q))
 
 
-def freeze_rules_from_d1(events: pl.DataFrame, campaign_yaml: dict[str, Any]) -> list[CandidateRule]:
+def freeze_rules_from_d1(
+    events: pl.DataFrame, campaign_yaml: dict[str, Any]
+) -> list[CandidateRule]:
     abs_d = events.filter(pl.col("discrepancy").is_not_null())["discrepancy"].abs().to_list()
     rvol = events.filter(pl.col("close_volume_rvol").is_not_null())["close_volume_rvol"].to_list()
     rules: list[CandidateRule] = []
@@ -276,12 +304,21 @@ def build_events_from_days(
     progress=None,
     store=None,
     interrupt_after: int | None = None,
+    crash_after: str | None = None,
+    crash_day: str | None = None,
+    instruments: pl.DataFrame | None = None,
+    elig_cfg: EligibilityConfig | None = None,
 ) -> tuple[pl.DataFrame, dict[str, list[tuple[str, float]]]]:
-    """Stream days. Beta/RVOL state updates after today's signal, including ineligible events."""
+    """Stream days. Beta/RVOL/elig state updates after today's signal."""
     from quant_edge_lab.discovery.v5.checkpoint import InterruptAfter
 
+    cfg = elig_cfg or EligibilityConfig(
+        min_prev_close=0.0, min_median_rth_dvol=0.0, min_dvol_days=0
+    )
+    listed = listed_ids(instruments, cfg)
     history_daily: list[pl.DataFrame] = []
     rvol_hist: dict[str, list[tuple[str, float]]] = {}
+    elig_hist: dict[str, dict[str, list[tuple[str, float]]]] = {}
     last = None
     cum_events = 0
     cum_rows = 0
@@ -289,6 +326,7 @@ def build_events_from_days(
         last = store.last_completed_day()
         history_daily = store.load_beta_history()
         rvol_hist = store.load_rvol()
+        elig_hist = store.load_elig()
         cum_events, cum_rows = store.counters()
     parts: list[pl.DataFrame] = []
     newly_completed = 0
@@ -298,47 +336,71 @@ def build_events_from_days(
         bars = load_day(day)
         n_rows_today = int(bars.height) if bars is not None and hasattr(bars, "height") else 0
         events_today = None
-        if bars is None or n_rows_today == 0:
-            panel = pl.DataFrame()
-            close_rows = None
-        else:
+        if bars is not None and n_rows_today:
             sess = with_session(bars)
             kind = classify_trading_day(sess, min_rth_minutes=min_rth_minutes)
-            panel = daily_panel_from_session(sess) if kind == "FULL_RTH" else pl.DataFrame()
-            close_rows = session_close_rows(bars, min_rth_minutes=min_rth_minutes) if kind == "FULL_RTH" else None
-            if close_rows is not None:
-                close_rows = attach_rvol(close_rows, rvol_hist, rvol_lookback)
-                ids = close_rows["instrument_id"].to_list()
-                beta_map = beta_from_history(history_daily, [str(x) for x in ids])
-                close_rows = attach_expected(close_rows, beta_map)
-                nxt = load_next(day)
-                rth = rth_only(sess)
-                nxt_by: dict[str, pl.DataFrame] = {}
-                if nxt is not None and nxt.height:
-                    ns = rth_only(with_session(nxt))
-                    for g in ns.partition_by("instrument_id"):
-                        nxt_by[str(g["instrument_id"][0])] = g
-                    del nxt
-                    del ns
-                enriched = []
+            rth = rth_only(sess)
+            today_eligible: set[str] = set()
+            if kind == "FULL_RTH":
                 for g in rth.partition_by("instrument_id"):
                     iid = str(g["instrument_id"][0])
-                    hit = close_rows.filter(pl.col("instrument_id") == iid)
-                    if hit.height == 0:
+                    if not is_listed(iid, listed):
                         continue
-                    rec = hit.row(0, named=True)
-                    if not eligible_for_event(rec):
+                    if causal_ok(iid, day, elig_hist, cfg):
+                        today_eligible.add(iid)
+                panel = daily_panel_from_session(sess, today_eligible)
+                close_rows = session_close_rows(bars, min_rth_minutes=min_rth_minutes)
+                if close_rows is not None and today_eligible:
+                    close_rows = close_rows.filter(
+                        pl.col("instrument_id").is_in(sorted(today_eligible))
+                    )
+                elif close_rows is not None:
+                    close_rows = close_rows.head(0)
+                if close_rows is not None and close_rows.height:
+                    close_rows = attach_rvol(close_rows, rvol_hist, rvol_lookback)
+                    ids = close_rows["instrument_id"].to_list()
+                    beta_map = beta_from_history(history_daily, [str(x) for x in ids])
+                    close_rows = attach_expected(close_rows, beta_map)
+                    nxt = load_next(day)
+                    nxt_by: dict[str, pl.DataFrame] = {}
+                    if nxt is not None and nxt.height:
+                        ns = rth_only(with_session(nxt))
+                        for g in ns.partition_by("instrument_id"):
+                            nxt_by[str(g["instrument_id"][0])] = g
+                        del nxt
+                        del ns
+                    enriched = []
+                    for g in rth.partition_by("instrument_id"):
+                        iid = str(g["instrument_id"][0])
+                        if iid not in today_eligible:
+                            continue
+                        hit = close_rows.filter(pl.col("instrument_id") == iid)
+                        if hit.height == 0:
+                            continue
+                        rec = hit.row(0, named=True)
+                        if not eligible_for_event(rec):
+                            continue
+                        enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
+                    if enriched:
+                        events_today = pl.DataFrame(enriched)
+                        parts.append(events_today)
+                    update_rvol_history(rvol_hist, close_rows, rvol_lookback)
+                if panel.height:
+                    history_daily.append(panel)
+                    if len(history_daily) > BETA_WINDOW:
+                        history_daily = history_daily[-BETA_WINDOW:]
+                for g in rth.partition_by("instrument_id"):
+                    iid = str(g["instrument_id"][0])
+                    if not is_listed(iid, listed):
                         continue
-                    enriched.append(attach_outcomes_for_instrument(rec, g, nxt_by.get(iid)))
-                if enriched:
-                    events_today = pl.DataFrame(enriched)
-                    parts.append(events_today)
-            if panel.height:
-                history_daily.append(panel)
-                if len(history_daily) > BETA_WINDOW:
-                    history_daily = history_daily[-BETA_WINDOW:]
-            if close_rows is not None:
-                update_rvol_history(rvol_hist, close_rows)
+                    update_elig_hist(
+                        elig_hist,
+                        iid=iid,
+                        day=day,
+                        close_1559=pick_bar_close(g, CLOSE_LAST),
+                        rth_dvol=rth_dollar_volume(g),
+                        lookback=cfg.lookback,
+                    )
             del bars
         n_ev_today = int(events_today.height) if events_today is not None else 0
         cum_events += n_ev_today
@@ -351,6 +413,13 @@ def build_events_from_days(
                 events_today=events_today,
                 cumulative_events=cum_events,
                 cumulative_rows=cum_rows,
+                elig_hist=elig_hist,
+                crash_after=(
+                    crash_after
+                    if crash_after
+                    and (day == crash_day or (crash_day is None and newly_completed == 0))
+                    else None
+                ),
             )
         newly_completed += 1
         if progress:
@@ -366,8 +435,7 @@ def build_events_from_days(
         if interrupt_after is not None and newly_completed >= interrupt_after:
             raise InterruptAfter(day)
     if store is not None:
-        ev = store.load_events()
-        return ev, rvol_hist
+        return store.load_events(), rvol_hist
     if not parts:
         return pl.DataFrame(), rvol_hist
     return pl.concat(parts, how="diagonal_relaxed"), rvol_hist

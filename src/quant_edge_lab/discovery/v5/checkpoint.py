@@ -26,7 +26,9 @@ def ckpt_dir(root: Path, run_id: str) -> Path:
     return p
 
 
-def write_ckpt(root: Path, run_id: str, name: str, payload: dict[str, Any], ident: dict[str, str]) -> Path:
+def write_ckpt(
+    root: Path, run_id: str, name: str, payload: dict[str, Any], ident: dict[str, str]
+) -> Path:
     rec = {
         "stage": name,
         "identity": ident,
@@ -38,7 +40,9 @@ def write_ckpt(root: Path, run_id: str, name: str, payload: dict[str, Any], iden
     return path
 
 
-def load_ckpt(root: Path, run_id: str, name: str, ident: dict[str, str] | None = None) -> dict[str, Any] | None:
+def load_ckpt(
+    root: Path, run_id: str, name: str, ident: dict[str, str] | None = None
+) -> dict[str, Any] | None:
     path = ckpt_dir(root, run_id) / f"{name}.json"
     if not path.exists():
         return None
@@ -66,10 +70,14 @@ def atomic_write_parquet(path: Path, df: pl.DataFrame) -> Path:
     return path
 
 
-def write_state_table(root: Path, run_id: str, name: str, df: pl.DataFrame, ident: dict[str, str]) -> Path:
+def write_state_table(
+    root: Path, run_id: str, name: str, df: pl.DataFrame, ident: dict[str, str]
+) -> Path:
     path = ckpt_dir(root, run_id) / f"{name}.parquet"
     atomic_write_parquet(path, df)
-    write_ckpt(root, run_id, f"{name}_table", {"path": str(path), "n": df.height, "complete": True}, ident)
+    write_ckpt(
+        root, run_id, f"{name}_table", {"path": str(path), "n": df.height, "complete": True}, ident
+    )
     return path
 
 
@@ -96,8 +104,12 @@ class InterruptAfter(RuntimeError):
     pass
 
 
+class CrashAfter(RuntimeError):
+    """Test hook: crash after a named artifact write, before progress advance."""
+
+
 class DayStore:
-    """Durable per-day scientific state: beta panels, RVOL, event partitions."""
+    """Per-day immutable snapshots. Progress pointer advances only after all artifacts exist."""
 
     def __init__(self, root: Path, run_id: str, ident: dict[str, str]) -> None:
         self.root = root
@@ -108,11 +120,10 @@ class DayStore:
     def events_part(self, day: str) -> Path:
         return v5_run_dir(self.root, self.run_id) / "events" / f"date={day}" / "part.parquet"
 
-    def beta_path(self) -> Path:
-        return ckpt_dir(self.root, self.run_id) / "beta_history.parquet"
-
-    def rvol_path(self) -> Path:
-        return ckpt_dir(self.root, self.run_id) / "rvol_state.json"
+    def state_dir(self, day: str) -> Path:
+        p = ckpt_dir(self.root, self.run_id) / "state" / f"day={day}"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
     def last_completed_day(self) -> str | None:
         rec = load_ckpt(self.root, self.run_id, "progress", self.ident)
@@ -124,30 +135,59 @@ class DayStore:
         rec = load_ckpt(self.root, self.run_id, "progress", self.ident) or {}
         return int(rec.get("cumulative_events") or 0), int(rec.get("cumulative_rows") or 0)
 
-    def load_beta_history(self) -> list[pl.DataFrame]:
-        p = self.beta_path()
-        if not p.exists():
-            return []
-        df = pl.read_parquet(p)
+    def _split_beta(self, df: pl.DataFrame) -> list[pl.DataFrame]:
         if df.height == 0 or "trading_date" not in df.columns:
             return []
-        out = []
-        for d in df["trading_date"].unique(maintain_order=True).to_list():
-            out.append(df.filter(pl.col("trading_date") == d))
-        return out
+        return [
+            df.filter(pl.col("trading_date") == d)
+            for d in df["trading_date"].unique(maintain_order=True).to_list()
+        ]
+
+    def load_beta_history(self) -> list[pl.DataFrame]:
+        last = self.last_completed_day()
+        if not last:
+            return []
+        p = self.state_dir(last) / "beta_history.parquet"
+        if not p.exists():
+            return []
+        return self._split_beta(pl.read_parquet(p))
 
     def load_rvol(self) -> dict[str, list[tuple[str, float]]]:
-        p = self.rvol_path()
+        last = self.last_completed_day()
+        if not last:
+            return {}
+        p = self.state_dir(last) / "rvol_state.json"
         if not p.exists():
             return {}
         raw = json.loads(p.read_text(encoding="utf-8"))
         return {k: [(a, float(b)) for a, b in v] for k, v in raw.items()}
 
+    def load_elig(self) -> dict[str, dict[str, list[tuple[str, float]]]]:
+        last = self.last_completed_day()
+        if not last:
+            return {}
+        p = self.state_dir(last) / "elig_state.json"
+        if not p.exists():
+            return {}
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        out: dict[str, dict[str, list[tuple[str, float]]]] = {}
+        for iid, rec in raw.items():
+            out[iid] = {
+                "closes": [(a, float(b)) for a, b in rec.get("closes") or []],
+                "dvols": [(a, float(b)) for a, b in rec.get("dvols") or []],
+            }
+        return out
+
     def load_events(self) -> pl.DataFrame:
+        last = self.last_completed_day()
         base = v5_run_dir(self.root, self.run_id) / "events"
-        if not base.exists():
+        if not last or not base.exists():
             return pl.DataFrame()
-        files = sorted(base.glob("date=*/part.parquet"))
+        files = []
+        for p in sorted(base.glob("date=*/part.parquet")):
+            day = p.parent.name.replace("date=", "")
+            if day <= last:
+                files.append(p)
         if not files:
             return pl.DataFrame()
         return pl.concat([pl.read_parquet(f) for f in files], how="diagonal_relaxed")
@@ -161,16 +201,30 @@ class DayStore:
         events_today: pl.DataFrame | None,
         cumulative_events: int,
         cumulative_rows: int,
+        elig_hist: dict[str, dict[str, list[tuple[str, float]]]] | None = None,
+        crash_after: str | None = None,
     ) -> None:
-        part = self.events_part(day)
         prev = self.last_completed_day()
         if prev is not None and day <= prev:
             raise ResumeIdentityError(f"refusing double-write events for completed day {day}")
+        part = self.events_part(day)
         if events_today is not None and events_today.height:
             atomic_write_parquet(part, events_today)
+        if crash_after == "events":
+            raise CrashAfter("events")
+        snap = self.state_dir(day)
         if beta_history:
-            atomic_write_parquet(self.beta_path(), pl.concat(beta_history, how="diagonal_relaxed"))
-        atomic_write_json(self.rvol_path(), {k: v for k, v in rvol_hist.items()})
+            atomic_write_parquet(
+                snap / "beta_history.parquet", pl.concat(beta_history, how="diagonal_relaxed")
+            )
+        else:
+            atomic_write_parquet(snap / "beta_history.parquet", pl.DataFrame())
+        if crash_after == "beta":
+            raise CrashAfter("beta")
+        atomic_write_json(snap / "rvol_state.json", rvol_hist)
+        if crash_after == "rvol":
+            raise CrashAfter("rvol")
+        atomic_write_json(snap / "elig_state.json", elig_hist or {})
         write_ckpt(
             self.root,
             self.run_id,

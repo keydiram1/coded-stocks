@@ -9,7 +9,13 @@ import polars as pl
 
 from quant_edge_lab.discovery.v5.models import Direction
 from quant_edge_lab.features.v4.residuals import loo_market_returns, winsor_weights
-from quant_edge_lab.features.v4r.beta import BETA_WINDOW, MIN_PAIRS, beta_from_history, loo_daily_market, ols_beta
+from quant_edge_lab.features.v4r.beta import (
+    BETA_WINDOW,
+    MIN_PAIRS,
+    beta_from_history,
+    loo_daily_market,
+    ols_beta,
+)
 
 CLOSE_ANCHOR = time(15, 54)
 CLOSE_LAST = time(15, 59)
@@ -89,6 +95,13 @@ def pick_bar_close(g: pl.DataFrame, t: time) -> float | None:
     return float(sub["close"][-1])
 
 
+def pick_bar_open(g: pl.DataFrame, t: time) -> float | None:
+    sub = g.filter(pl.col("time_et") == t)
+    if sub.height == 0:
+        return None
+    return float(sub["open"][0])
+
+
 def pick_window_volume(g: pl.DataFrame) -> float | None:
     sub = g.filter((pl.col("time_et") >= time(15, 55)) & (pl.col("time_et") <= CLOSE_LAST))
     if sub.height == 0:
@@ -139,6 +152,7 @@ __all__ = [
     "loo_daily_market",
     "ols_beta",
     "pick_bar_close",
+    "pick_bar_open",
     "pick_close_px",
     "pick_open",
     "pick_window_volume",

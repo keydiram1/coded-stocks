@@ -59,7 +59,9 @@ def fmt_hms(seconds: float | None) -> str:
     return f"{h:02d}:{m:02d}:{sec:02d}"
 
 
-def persist_snapshot(root: Path, run_id: str, snap: TelemetrySnapshot, extra: dict[str, Any] | None = None) -> Path:
+def persist_snapshot(
+    root: Path, run_id: str, snap: TelemetrySnapshot, extra: dict[str, Any] | None = None
+) -> Path:
     body = strip_sealed(
         {
             "run_id": run_id,

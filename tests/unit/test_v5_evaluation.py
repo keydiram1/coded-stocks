@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import polars as pl
 import pytest
 
-from quant_edge_lab.discovery.v5.evaluation import day_block_stats, decide, evaluate_frozen, signed_floor
+from quant_edge_lab.discovery.v5.evaluation import (
+    day_block_stats,
+    decide,
+    evaluate_frozen,
+    signed_floor,
+)
 from quant_edge_lab.discovery.v5.manifest import load_v5
 from quant_edge_lab.discovery.v5.models import CandidateRule
-from pathlib import Path
 
 
 def _gates(**sample):
@@ -28,7 +34,7 @@ def _gates(**sample):
 def _rule():
     return CandidateRule(
         hypothesis_id="H1_PRIMARY",
-        mechanism_id="forced_eod_auction_flow",
+        mechanism_id="forced_eod_preclose_flow",
         role="primary",
         dislocation_abs_min=0.0,
         require_rvol=False,
@@ -40,7 +46,7 @@ def _rule():
 def _events(mean: float, n: int = 40) -> pl.DataFrame:
     return pl.DataFrame(
         {
-            "instrument_id": [f"i{i%5}" for i in range(n)],
+            "instrument_id": [f"i{i % 5}" for i in range(n)],
             "trading_date": [f"2024-01-{(i % 20) + 1:02d}" for i in range(n)],
             "discrepancy": [0.05] * n,
             "close_volume_rvol": [2.0] * n,
@@ -56,7 +62,14 @@ def test_yaml_floors_are_signed_not_abs():
 
 
 def test_negative_twenty_bp_never_passes():
-    st = {"ticker_days": 10, "trading_days": 10, "tickers": 5, "top_ticker_share": 0.2, "mean": -0.002, "win_rate": 0.2}
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": -0.002,
+        "win_rate": 0.2,
+    }
     d2 = decide(split="D2", hypothesis_id="H1", stats=st, gates=_gates(), bh_survivor=True)
     d3 = decide(split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=-0.002)
     assert d2.label == "KILL" and d2.reason == "direction_failed"
@@ -65,15 +78,76 @@ def test_negative_twenty_bp_never_passes():
 
 
 def test_positive_below_d2_floor_kills():
-    st = {"ticker_days": 10, "trading_days": 10, "tickers": 5, "top_ticker_share": 0.2, "mean": 0.0001, "win_rate": 0.6}
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": 0.0001,
+        "win_rate": 0.6,
+    }
     d2 = decide(split="D2", hypothesis_id="H1", stats=st, gates=_gates(), bh_survivor=True)
     assert d2.label == "KILL" and d2.reason == "below_d2_floor"
 
 
 def test_d3_subthreshold_only_if_positive_below_floor():
-    st = {"ticker_days": 10, "trading_days": 10, "tickers": 5, "top_ticker_share": 0.2, "mean": 0.0008, "win_rate": 0.6}
-    d3 = decide(split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=0.0008)
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": 0.0008,
+        "win_rate": 0.6,
+    }
+    d3 = decide(
+        split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=0.0008, bh_survivor=True
+    )
     assert d3.label == "VALIDATED_SUBTHRESHOLD_PHENOMENON"
+
+
+def test_d3_plus20bp_nonsignificant_is_kill():
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": 0.002,
+        "win_rate": 0.6,
+    }
+    d3 = decide(
+        split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=0.002, bh_survivor=False
+    )
+    assert d3.label == "KILL" and d3.reason == "d3_not_significant"
+
+
+def test_d3_plus5bp_significant_is_subthreshold():
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": 0.0005,
+        "win_rate": 0.6,
+    }
+    d3 = decide(
+        split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=0.0005, bh_survivor=True
+    )
+    assert d3.label == "VALIDATED_SUBTHRESHOLD_PHENOMENON"
+
+
+def test_d3_plus15bp_significant_is_pass():
+    st = {
+        "ticker_days": 10,
+        "trading_days": 10,
+        "tickers": 5,
+        "top_ticker_share": 0.2,
+        "mean": 0.0015,
+        "win_rate": 0.6,
+    }
+    d3 = decide(
+        split="D3", hypothesis_id="H1", stats=st, gates=_gates(), d2_mean=0.0015, bh_survivor=True
+    )
+    assert d3.label == "RESEARCH_PASS"
 
 
 def test_sample_counts_use_finite_primary_only():
@@ -105,7 +179,7 @@ def test_d2_runs_bh_across_hypotheses():
         _rule(),
         CandidateRule(
             hypothesis_id="H2_ABS_Q95",
-            mechanism_id="forced_eod_auction_flow",
+            mechanism_id="forced_eod_preclose_flow",
             role="robustness",
             dislocation_abs_min=0.0,
             require_rvol=False,
@@ -114,7 +188,7 @@ def test_d2_runs_bh_across_hypotheses():
         ),
         CandidateRule(
             hypothesis_id="H3_DISLOCATION_ONLY",
-            mechanism_id="forced_eod_auction_flow",
+            mechanism_id="forced_eod_preclose_flow",
             role="robustness",
             dislocation_abs_min=0.0,
             require_rvol=False,

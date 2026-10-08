@@ -9,8 +9,12 @@ directional resolution → falsification.
 YAML in this directory is a **preregistered proposal**. Thresholds and the
 campaign-specific 12bp floor require reviewer approval before `--execute`.
 
-`CLOSE_DISLOCATION_REVERSAL_V1` tests whether abnormal close-window volume plus
-idiosyncratic final-5m displacement vs a causal LOO market expectation reverses
-after the close. It is not claimed to be an edge.
+`CLOSE_DISLOCATION_REVERSAL_V1` (`forced_eod_preclose_flow`) tests whether
+abnormal close-window volume plus idiosyncratic final-5m displacement vs a
+causal LOO market expectation reverses after the close.
+
+This V1 tests a pre-close/end-of-day forced-flow dislocation. It does **not**
+claim to isolate the official closing auction. Auction-specific research
+requires verified auction/official-close data. It is not claimed to be an edge.
 
 Options surface / local relative value is intentionally not coded here.

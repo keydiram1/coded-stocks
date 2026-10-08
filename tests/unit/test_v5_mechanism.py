@@ -70,7 +70,9 @@ def test_pit_available_must_not_exceed_decision():
 
 
 def test_sealed_oos_stays_closed():
-    assert_sealed_oos_closed({"sealed_oos": "inaccessible", "splits": {"sealed_oos": "closed_do_not_open"}})
+    assert_sealed_oos_closed(
+        {"sealed_oos": "inaccessible", "splits": {"sealed_oos": "closed_do_not_open"}}
+    )
     with pytest.raises(RuntimeError):
         open_sealed_oos()
     with pytest.raises(AssertionError):
@@ -79,3 +81,40 @@ def test_sealed_oos_stays_closed():
 
 def test_beta_window_constant_is_twenty():
     assert BETA_WINDOW == 20
+
+
+def test_preflight_complete_calendar_passes_and_gap_refuses():
+    from quant_edge_lab.discovery.v5.preflight import (
+        CalendarError,
+        next_session,
+        validate_research_calendar,
+    )
+
+    man = {
+        "splits": {
+            "D1": {"start": "2022-01-03", "end": "2022-01-05", "n_days": 3},
+            "D2": {"start": "2022-01-06", "end": "2022-01-07", "n_days": 2},
+            "D3": {"start": "2022-01-10", "end": "2022-01-11", "n_days": 2},
+        },
+        "eligibility": {"warmup_trading_days": 2},
+    }
+    days = [
+        "2021-12-30",
+        "2021-12-31",
+        "2022-01-03",
+        "2022-01-04",
+        "2022-01-05",
+        "2022-01-06",
+        "2022-01-07",
+        "2022-01-10",
+        "2022-01-11",
+    ]
+    rec = validate_research_calendar(days, man, parquet_exists=lambda d: True)
+    assert rec["counts"]["D1"] == 3
+    assert next_session("2022-01-05", days) == "2022-01-06"
+    gap = [d for d in days if d != "2022-01-06"]
+    try:
+        validate_research_calendar(gap, man, parquet_exists=lambda d: True)
+        raise AssertionError("missing middle day must refuse")
+    except CalendarError:
+        pass

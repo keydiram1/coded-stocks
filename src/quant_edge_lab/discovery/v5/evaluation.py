@@ -62,7 +62,9 @@ def signed_floor(gates: dict[str, Any], split: str) -> float:
     return float(gates[key]["signed_mean_floor"])
 
 
-def day_block_stats(events: pl.DataFrame, col: str = "primary_signed", *, n_boot: int = 1000, seed: int = 42) -> dict[str, Any]:
+def day_block_stats(
+    events: pl.DataFrame, col: str = "primary_signed", *, n_boot: int = 1000, seed: int = 42
+) -> dict[str, Any]:
     ydf = finite_primary(events, col)
     conc = concentration(ydf)
     if ydf.height == 0:
@@ -104,9 +106,16 @@ def day_block_stats(events: pl.DataFrame, col: str = "primary_signed", *, n_boot
 
 
 def _sample_kill(stats: dict[str, Any], sample: dict[str, Any]) -> str | None:
-    if stats["ticker_days"] < sample["min_ticker_days"] or stats["trading_days"] < sample["min_trading_days"] or stats["tickers"] < sample["min_tickers"]:
+    if (
+        stats["ticker_days"] < sample["min_ticker_days"]
+        or stats["trading_days"] < sample["min_trading_days"]
+        or stats["tickers"] < sample["min_tickers"]
+    ):
         return "sample"
-    if stats.get("top_ticker_share") is not None and stats["top_ticker_share"] > sample["max_top_ticker_share"]:
+    if (
+        stats.get("top_ticker_share") is not None
+        and stats["top_ticker_share"] > sample["max_top_ticker_share"]
+    ):
         return "concentration"
     wr = stats.get("win_rate")
     if wr is not None and wr < sample["min_win_rate"]:
@@ -126,10 +135,17 @@ def decide(
 ) -> ScientificDecision:
     sample = gates["sample"]
     mean = stats.get("mean")
-    kw = {"hypothesis_id": hypothesis_id, "split": split, "mean_primary": mean, "trial_index": trial_index}
+    kw = {
+        "hypothesis_id": hypothesis_id,
+        "split": split,
+        "mean_primary": mean,
+        "trial_index": trial_index,
+    }
 
     if split == "D1":
-        return ScientificDecision(label="ACTIVE", reason="d1_descriptive_no_significance_tuning", **kw)
+        return ScientificDecision(
+            label="ACTIVE", reason="d1_descriptive_no_significance_tuning", **kw
+        )
 
     sk = _sample_kill(stats, sample)
     if sk:
@@ -152,9 +168,13 @@ def decide(
             return ScientificDecision(label="KILL", reason="direction_failed", **kw)
         if gates["d3"].get("require_sign_match_d2") and (d2_mean is None or d2_mean <= 0):
             return ScientificDecision(label="KILL", reason="sign_mismatch_d2", **kw)
+        if bh_survivor is not True:
+            return ScientificDecision(label="KILL", reason="d3_not_significant", **kw)
         floor = signed_floor(gates, "D3")
         if mean < floor:
-            return ScientificDecision(label="VALIDATED_SUBTHRESHOLD_PHENOMENON", reason="below_d3_floor", **kw)
+            return ScientificDecision(
+                label="VALIDATED_SUBTHRESHOLD_PHENOMENON", reason="below_d3_floor", **kw
+            )
         return ScientificDecision(label="RESEARCH_PASS", reason="d3_signed_floor", **kw)
 
     return ScientificDecision(label="ACTIVE", reason="measured", **kw)
@@ -168,6 +188,7 @@ def evaluate_frozen(
     gates: dict[str, Any],
     d2_means: dict[str, float] | None = None,
     d2_survivors: set[str] | None = None,
+    preregistered_trial_count: int = 3,
 ) -> list[dict[str, Any]]:
     from quant_edge_lab.discovery.v5.campaigns.close_dislocation import apply_rule
 
@@ -190,7 +211,7 @@ def evaluate_frozen(
         rows.append({"rule": rule, "stats": st, "trial_index": i})
 
     bh_map: dict[str, bool] = {}
-    if split == "D2" and rows:
+    if split in {"D2", "D3"} and rows:
         bh = benjamini_hochberg(pvals, q=q)
         for rec, b in zip(rows, bh, strict=True):
             bh_map[rec["rule"].hypothesis_id] = bool(b["bh_rejected"])
@@ -209,14 +230,15 @@ def evaluate_frozen(
             gates=gates,
             d2_mean=(d2_means or {}).get(hid),
             trial_index=rec["trial_index"],
-            bh_survivor=bh_map.get(hid) if split == "D2" else None,
+            bh_survivor=bh_map.get(hid) if split in {"D2", "D3"} else None,
         )
         out.append(
             {
                 "rule": rule.model_dump(),
                 "stats": rec["stats"],
                 "decision": dec.model_dump(),
-                "trial_count": trial_count({"hypotheses": [{"hypothesis_id": r.hypothesis_id} for r in rules]}) if split != "D2" else len(rows),
+                "trial_count": preregistered_trial_count,
+                "tested_this_stage": len(rows),
             }
         )
     return out

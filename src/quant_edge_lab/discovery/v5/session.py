@@ -49,7 +49,12 @@ def classify_trading_day(sessioned: pl.DataFrame, *, min_rth_minutes: int = MIN_
         return "HALF_OR_INCOMPLETE"
     n_market = int(rth["time_et"].n_unique())
     last_m = int(
-        rth.select((pl.col("time_et").dt.hour() * 60 + pl.col("time_et").dt.minute()).max()).item()
+        rth.select(
+            (
+                pl.col("time_et").dt.hour().cast(pl.Int32) * 60
+                + pl.col("time_et").dt.minute().cast(pl.Int32)
+            ).max()
+        ).item()
     )
     want = _hhmm(FULL_DAY_LAST_BAR)
     if n_market < min_rth_minutes or last_m < want:

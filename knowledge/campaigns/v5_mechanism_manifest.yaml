@@ -16,7 +16,7 @@ note: >
 
 data:
   source: massive-flat minute bars only
-  identity: hash of massive flatfiles minute_aggs_v1_manifest.json
+  identity: hash of massive flatfiles minute_aggs_v1_manifest.json plus instruments.parquet
   no_download: [news, trades, quotes, NBBO, L2, L3, fundamentals, options_flatfiles]
   options_status: not_in_this_campaign_pending_s3_entitlement
 
@@ -47,8 +47,24 @@ session:
     Per-name event eligibility separately requires 15:54–15:59 close-window bars.
     Sparse names that do not trade every minute do not make a full market day incomplete.
 
+eligibility:
+  security_type: COMMON_STOCK
+  exchanges: [NASDAQ, NYSE, NYSE_AMERICAN]
+  price_prev_close_min: 1.00
+  trailing_20d_median_rth_dollar_volume_min: 1000000
+  warmup_trading_days: 20
+  listing_source: massive-flat/instruments.parquet
+  listing_pit_note: >
+    Exchange/security_type use instruments.parquet (last-available CS snapshot),
+    the same table V4 uses. That is not session-dated listing history. Execute
+    hashes the file and refuses if it is absent. prev_close and trailing RTH
+    dollar volume are causal from completed prior sessions. Event universe and
+    LOO market share this eligible set.
+
 beta:
   window_trading_days: 20
+  daily_return: rth_0930_open_to_1559_close
+  require_both_bars: true
   estimator: ols_covariance_with_intercept_form
   insufficient: null
   no_fallback_to_one: true
@@ -72,8 +88,13 @@ campaigns:
 primary_campaign: CLOSE_DISLOCATION_REVERSAL_V1
 
 CLOSE_DISLOCATION_REVERSAL_V1:
-  mechanism_id: forced_eod_auction_flow
+  mechanism_id: forced_eod_preclose_flow
   hypothesis_family: close_dislocation_reversal
+  auction_claim: false
+  mechanism_note: >
+    V1 tests a pre-close/end-of-day forced-flow dislocation using 15:54 close →
+    15:59 close. It does NOT claim to isolate the official closing auction.
+    Auction-specific research requires verified auction/official-close data.
   asset_class: us_equity
   unit: instrument_session_close
   observed: stock_final_5m_return

@@ -38,7 +38,9 @@ def filter_days(days: list[str], split: str, manifest: dict[str, Any] | None = N
     return [d for d in days if in_split(d, split, manifest)]
 
 
-def assert_no_future_split_in_estimation(estimation_split: str, used_days: list[str], manifest: dict[str, Any] | None = None) -> None:
+def assert_no_future_split_in_estimation(
+    estimation_split: str, used_days: list[str], manifest: dict[str, Any] | None = None
+) -> None:
     rank = {n: i for i, n in enumerate(SPLIT_ORDER)}
     cap = rank[estimation_split]
     for d in used_days:
@@ -52,12 +54,17 @@ def assert_sealed_oos_closed(manifest: dict[str, Any] | None = None) -> None:
     if state not in {SEALED_OOS_STATE, "closed", "closed_do_not_open"}:
         raise AssertionError(f"sealed OOS must remain closed, got {state}")
     splits = (manifest or {}).get("splits") or {}
-    if splits.get("OOS") or splits.get("D4") or splits.get("sealed_oos") not in {
-        None,
-        "closed_do_not_open",
-        SEALED_OOS_STATE,
-        "closed",
-    }:
+    if (
+        splits.get("OOS")
+        or splits.get("D4")
+        or splits.get("sealed_oos")
+        not in {
+            None,
+            "closed_do_not_open",
+            SEALED_OOS_STATE,
+            "closed",
+        }
+    ):
         if "OOS" in splits or "D4" in splits:
             raise AssertionError("do not invent a historical fourth/sealed OOS split")
 
