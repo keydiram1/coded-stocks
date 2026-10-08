@@ -64,6 +64,44 @@ def log_jsonl(root: Path, **kw: Any) -> None:
     append_jsonl(v4r_ckpt_dir(root) / "events.jsonl", kw)
 
 
+def _science_search_complete(root: Path, ident: dict[str, str]) -> bool:
+    """True iff D1/stability/D2 artifacts already exist for this identity (do not recompute)."""
+    ckpt = v4r_ckpt_dir(root)
+    d1p, stp = ckpt / "d1_tree.json", ckpt / "stability.json"
+    if not d1p.exists() or not stp.exists():
+        return False
+    d1 = json.loads(d1p.read_text(encoding="utf-8"))
+    st = json.loads(stp.read_text(encoding="utf-8"))
+    if d1.get("identity") != ident or st.get("identity") != ident:
+        return False
+    n_sub = int(st.get("n_sub") or 0)
+    if n_sub <= 0 or int(st.get("i") or 0) < n_sub:
+        return False
+    return any(ckpt.glob("d2_*.json"))
+
+
+def _ev_from_artifacts(root: Path) -> dict[str, Any]:
+    ckpt = v4r_ckpt_dir(root)
+    d2_rows = []
+    for p in sorted(ckpt.glob("d2_*.json")):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        rec.pop("identity", None)
+        d2_rows.append(rec)
+    d3_rows = []
+    survivors = []
+    sub = []
+    for p in sorted(ckpt.glob("d3_*.json")):
+        rec = json.loads(p.read_text(encoding="utf-8"))
+        rec.pop("identity", None)
+        d3_rows.append(rec)
+        if rec.get("decision") == "RESEARCH_PASS":
+            survivors.append(rec)
+        elif rec.get("decision") == "VALIDATED_SUBTHRESHOLD_PHENOMENON":
+            sub.append(rec)
+    stop = None if any(r.get("status") == "D2_PASS" for r in d2_rows) else "STOP_F_zero_d2"
+    return {"d2": d2_rows, "d3": d3_rows, "survivors": survivors, "subthreshold": sub, "spa": None, "stop": stop}
+
+
 def fail_dump(root: Path, stage: str, unit: str, exc: BaseException, last: str) -> None:
     rec = {
         "FAILED_STAGE": stage,
@@ -200,6 +238,53 @@ def run_campaign_v4r(root: Path, *, smoke_days: list[str] | None = None) -> dict
         write_ckpt(root, "preflight", {"freeze": fr}, ident)
         last = "preflight"
         days = smoke_days if smoke_days is not None else research_days(root)
+        if smoke_days is None and _science_search_complete(root, ident):
+            console.print("[V4R] resume: scientific stages complete; ridge diagnostic + final.md only")
+            last = "d2d3"
+            target = man["targets"]["primary"]
+            d3_days = [d for d in days if man["splits"]["D3"]["start"] <= d <= man["splits"]["D3"]["end"]]
+            d1_rec = json.loads((v4r_ckpt_dir(root) / "d1_tree.json").read_text(encoding="utf-8"))
+            stab_rec = json.loads((v4r_ckpt_dir(root) / "stability.json").read_text(encoding="utf-8"))
+            n_sub = int(stab_rec.get("n_sub") or 100)
+            stats = stab_rec["stats"]
+            need_path = float(gates["stability"]["min_path_rediscovery"])
+            need_sign = float(gates["stability"]["min_sign_agree"])
+            n_stable = 0
+            for s in stats.values():
+                freq = s["path_hits"] / n_sub
+                agree = (s["dir_hits"] / s["path_hits"]) if s["path_hits"] else 0.0
+                s["path_rediscovery"] = freq
+                s["direction_agreement"] = agree
+                if freq + 1e-12 >= need_path and agree + 1e-12 >= need_sign and not s.get("impossible"):
+                    n_stable += 1
+            ev = _ev_from_artifacts(root)
+            scaler_path = v4r_ckpt_dir(root) / "ridge_scaler.json"
+            lin = None
+            if scaler_path.exists():
+                art = json.loads(scaler_path.read_text(encoding="utf-8"))
+                num = list(art.get("features") or [])
+                from quant_edge_lab.discovery.linear import predict_ridge, decile_spread
+
+                cols = list(dict.fromkeys(num + ["trading_date", "instrument_id", "decision_ts", target]))
+                d3 = load_panel(root, d3_days, cols) if d3_days else pl.DataFrame()
+                coef, mu, sd = np.array(art["coef"]), np.array(art["mu"]), np.array(art["sd"])
+                if d3.height and num and all(c in d3.columns for c in num) and target in d3.columns:
+                    pred = predict_ridge(d3.select(num).to_numpy(), coef, mu, sd)
+                    lin = {
+                        "lambda": art["lambda"],
+                        "d3_decile_spread": decile_spread(pred, d3[target].to_numpy().astype(float)),
+                        "n_features": len(num),
+                        "scaler": "train_only",
+                        "reused_checkpoint": True,
+                    }
+            out = {
+                "n_candidates": len(d1_rec.get("candidates") or []),
+                "n_stable": n_stable,
+                "stability": stats,
+                **ev,
+                "linear": lin,
+            }
+            return _final(root, ident, out, t0, fr)
         run_stage1(root, man, days, ident)
         last = "stage1"
         run_graphs(root, man, days, ident)
@@ -249,7 +334,7 @@ def run_campaign_v4r(root: Path, *, smoke_days: list[str] | None = None) -> dict
             art = ridge_train_scaler(d1.select(num).to_numpy(), d1[target].to_numpy().astype(float), list(map(float, gates["linear"]["lambda_grid"])))
             art["features"] = num
             atomic_write_json(v4r_ckpt_dir(root) / "ridge_scaler.json", art)
-            from quant_edge_lab.discovery.linear import predict_ridge
+            from quant_edge_lab.discovery.linear import decile_spread, predict_ridge
 
             coef, mu, sd = np.array(art["coef"]), np.array(art["mu"]), np.array(art["sd"])
             if d3.height:
