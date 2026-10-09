@@ -6,8 +6,13 @@ frozen_before_empirical_execution: false
 sealed_oos: inaccessible
 close_dislocation_family: CLOSED_NO_EDGE
 options_local_rv: DESIGN_ONLY_NOT_READY
-recommended_next_campaign: IDIO_SHOCK_RETENTION_V1
+recommended_next_campaign: MARKET_RESIDUAL_SHOCK_RETENTION_V1
+supersedes_recommended_name: IDIO_SHOCK_RETENTION_V1
 classification: READY_TO_IMPLEMENT_NEXT_EXPERIMENT
+primary_entry: T1_plus_2_open
+skip_open: T1_plus_1_open
+d3_is_globally_untouched: false
+d3_valid_iff_v6_frozen_before_any_v6_d3_view: true
 
 prior_collision:
   V1_gap_rvol_continuation: FAILED
@@ -24,39 +29,41 @@ prior_collision:
   V5_options_local_rv: BLOCKED_no_historical_quotes
 
 candidates:
-  - id: IDIO_SHOCK_RETENTION_V1
-    name: idiosyncratic shock retention (information vs flow)
+  - id: MARKET_RESIDUAL_SHOCK_RETENTION_V1
+    former_id: IDIO_SHOCK_RETENTION_V1
+    name: market-residual shock retention (information vs flow)
     overlap: PARTIALLY_OVERLAPPING
     overlap_note: >
-      Uses V5-style LOO residual construction and a path idea from V2, but the
-      state is retention of an identified shock after a wait window, not V2
-      pullback-band reacceleration, not V4 snapshot residual, not V5 close clock.
+      Uses V5-style LOO market residual construction and a path idea from V2,
+      but the state is retention of a market-residual shock after a wait,
+      not V2 pullback-band reacceleration, not V4 snapshot residual, not V5
+      close clock. Residual is market-only, not sector-idiosyncratic.
     rationale: >
-      A short idiosyncratic impulse is a mix of information and temporary pressure.
-      After a completed wait, retained displacement is the information component;
-      dissipated displacement is exhausted flow. Direction follows that split.
+      A short market-residual impulse mixes information and temporary pressure.
+      After a completed wait, retained displacement is the information
+      component; dissipated displacement is exhausted flow.
     signal_at_T: >
-      Completed impulse window residual, completed wait-window remaining residual,
-      retention ratio, all using bars whose first_available_at <= T. No current
-      unfinished minute.
+      Completed P0/P1/P2 closes, impulse_residual, remaining_residual,
+      retention, shock_z vs exact prior 20 same-clock residuals. Signal
+      known after T1 close. Primary entry T1+2 open.
     expected_response: >
-      High retention => continuation of shock sign. Low retention => reversal of
-      shock sign. Impulse-only continuation is a control, not a promotion path.
-    horizon: 15m_primary after next completed-minute open
+      High retention => continue impulse_residual sign. Low retention =>
+      reverse. Impulse-only is control. H1 must beat stratified complement.
+    horizon: 15m_primary after T1_plus_2_open
     data_required: stock minute OHLCV plus causal beta/LOO
     data_available: yes_2021-10-01_to_2026-10-01
     confounders: [generic_momentum, volatility_scaling, open_close_regimes, ticker_clustering]
-    leakage: current_bar_if_impulse_uses_unfinished_minute
+    leakage: T1_plus_1_open_would_be_too_tight
     pit: instruments_parquet_not_session_dated
-    execution: next_bar_open_not_a_fill; wide_spreads_on_shocked_names
+    execution: T1_plus_2_open_not_a_fill; wide_spreads_on_shocked_names
     why_fail: retention_is_noisy_momentum; minute_path_inside_impulse_ambiguous
     falsify: >
-      H1 mean<=0 on confirmation; or H1 does not beat impulse-only control;
-      or only H2 works and is then promoted (forbidden).
+      H1 mean<=0 on confirmation; or incremental day-delta<=0; or only H2/H3
+      work (not campaign success).
     scores: {A: 4, B: 4, C: 3, D: 4, E: 4, F: 3, G: 3, total: 25}
 
   - id: FAILED_IMPULSE_REVERSAL
-    name: failed hold after idiosyncratic extreme
+    name: failed hold after market-residual extreme
     overlap: ALREADY_TESTED
     overlap_note: V2 B/I/E failed-move patterns. Not eligible as next primary.
     rationale: Exhausted pressure; liquidity refill; price cannot hold extreme.
@@ -128,15 +135,13 @@ candidates:
     scores: {A: 1, B: 2, C: 5, D: 1, E: 3, F: 1, G: 2, total: 15}
 
 why_retention_beats_others: >
-  Highest total and the only candidate that is both measurable with stock
-  minutes and not a rerun of a failed V2 pattern family. It uses the V5
-  expected/observed/discrepancy template on an intraday shock instead of the
-  closed close-window. Premarket/open ideas collide with V1/V2 G. Failed-impulse
-  collides with V2 B/I. Options activity cannot be directional on aggregates.
+  Highest total and the only candidate measurable with stock minutes that is
+  not a V2 rerun. Residual is market-LOO only. Premarket/open collide with
+  V1/V2 G. Failed-impulse collides with V2 B/I. Options aggregates cannot
+  be directional.
 
 argument_against_retention: >
-  Retention may be a restatement of momentum: names still displaced after 10
-  minutes are names still trending. Minute OHLC also cannot sequence the
-  impulse bar. The control hypothesis H3_IMPULSE_ONLY exists to kill the
-  campaign if retention adds nothing. Shocked names are exactly where spreads
-  and slippage destroy paper 15m means.
+  Retention may be momentum with extra steps. shock_z matching plus the
+  incremental day-delta gate exists to kill the campaign if retention adds
+  nothing. Shocked names are where spreads destroy paper 15m means. T1+2
+  entry is more conservative and may shrink any real edge.
