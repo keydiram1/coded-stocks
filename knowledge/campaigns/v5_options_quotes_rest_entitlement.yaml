@@ -1,0 +1,15 @@
+# REST historical options quotes entitlement probe. Not an experiment.
+endpoint: GET /v3/quotes/{optionsTicker}
+probe_ticker: O:SPY251114C00600000
+interval: 2025-10-08T14:30:00Z .. 2025-10-08T14:31:00Z
+limit: 1
+hosts: [api.massive.com, api.polygon.io]
+http: 401
+error: Unknown API Key
+api_status: ERROR
+used_flatfiles: false
+readiness: NOT_READY
+stop: true
+note: >
+  MASSIVE_API_KEY is present locally but both REST hosts reject it as unknown.
+  S3 list of quotes_v1 still works and is not used. No quote schema observed.

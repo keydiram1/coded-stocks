@@ -15,8 +15,9 @@ note: >
   interpolation in option price vs strike confuses convexity with mispricing.
   Intended V1 path is synchronized OPRA quote snapshots, valid mids, completed-minute
   underlying alignment, then arbitrage-aware local relative value (butterfly /
-  convexity PRIMARY). quotes_v1 is LIST-visible but GET-forbidden with current
-  keys, and one day is ~116 GiB compressed. Do not execute.
+  convexity PRIMARY).   quotes_v1 is LIST-visible but GET-forbidden and too large per day.
+  Targeted REST GET /v3/quotes/{optionsTicker} returned HTTP 401
+  Unknown API Key. Do not execute.
 
 rejected_primary_path:
   id: trade_aggregate_price_close_linear_interpolation

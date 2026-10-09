@@ -268,6 +268,21 @@ def massive_audit_options_quotes() -> None:
     console.print_json(data={k: report[k] for k in report if k != "written"})
 
 
+@massive_app.command("audit-options-quotes-rest")
+def massive_audit_options_quotes_rest() -> None:
+    """Tiny REST historical options quote entitlement probe. No flat files. No alpha."""
+    from quant_edge_lab.data.massive.options_quotes_rest import probe_quotes_rest_entitlement
+
+    report = probe_quotes_rest_entitlement(Path.cwd())
+    console.print(
+        f"entitled={report.get('entitled')} http={report.get('http')} error={report.get('error')}"
+    )
+    console.print(f"readiness={report.get('readiness')} stop={report.get('stop')}")
+    console.print_json(data={k: report[k] for k in report if k != "written"})
+    if report.get("stop"):
+        raise typer.Exit(code=2)
+
+
 @hyp_app.command("list")
 def hypotheses_list() -> None:
     from quant_edge_lab.discovery.catalog import all_families, write_registry
