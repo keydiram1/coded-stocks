@@ -4,9 +4,7 @@ import os
 from pathlib import Path
 
 
-def load_dotenv(root: Path | None = None) -> None:
-    """Load KEY=VALUE from project .env into os.environ (does not override existing)."""
-    path = (root or Path.cwd()) / ".env"
+def _apply_dotenv_file(path: Path) -> None:
     if not path.is_file():
         return
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -18,6 +16,15 @@ def load_dotenv(root: Path | None = None) -> None:
         value = value.strip().strip("'").strip('"')
         if key and key not in os.environ:
             os.environ[key] = value
+
+
+def load_dotenv(root: Path | None = None) -> None:
+    """Load KEY=VALUE from project .env into os.environ (does not override existing)."""
+    _apply_dotenv_file((root or Path.cwd()) / ".env")
+    extra = os.environ.get("QUANT_EDGE_DOTENV", "").strip()
+    if extra:
+        _apply_dotenv_file(Path(extra))
+    _apply_dotenv_file(Path.home() / "quant-edge-lab" / ".env")
 
 
 def massive_api_key(root: Path | None = None) -> str:

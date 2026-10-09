@@ -222,6 +222,39 @@ def massive_sync_flatfiles(
     console.print_json(data=meta)
 
 
+@massive_app.command("sync-options-flatfiles")
+def massive_sync_options_flatfiles(
+    start: str | None = None,
+    end: str | None = None,
+    workers: int = 4,
+) -> None:
+    """Download OPRA minute Flat Files. Raw csv.gz only. Does not run science."""
+    from quant_edge_lab.data.massive.options_flatfiles import (
+        list_local_minute_days,
+        sync_options_range,
+    )
+
+    root = Path.cwd()
+    if not start or not end:
+        days = list_local_minute_days(root)
+        if not days:
+            console.print("Need --start and --end (no local OPRA days to infer a window).")
+            raise typer.Exit(code=1)
+        start = start or days[0]
+        end = end or days[-1]
+    meta = sync_options_range(root, start, end, workers=workers)
+    console.print_json(data=meta)
+
+
+@massive_app.command("audit-options-flatfiles")
+def massive_audit_options_flatfiles() -> None:
+    """Inventory local OPRA files. Does not download. Does not search for alpha."""
+    from quant_edge_lab.data.massive.options_audit import run_options_audit
+
+    report = run_options_audit(Path.cwd())
+    console.print_json(data=report)
+
+
 @hyp_app.command("list")
 def hypotheses_list() -> None:
     from quant_edge_lab.discovery.catalog import all_families, write_registry
@@ -525,6 +558,19 @@ def discovery_campaign_v5_continuation(
     console.print(f"launch={state['launch_command']}")
     console.print("SIGNAL_ONLY. STOP. Default does not load D3 or run confirmation.")
     raise typer.Exit(code=0)
+
+
+@disc_app.command("close-dislocation-postmortem")
+def discovery_close_dislocation_postmortem() -> None:
+    """Descriptive equal-day D1/D2 recompute. Does not load D3. Does not change decisions."""
+    from quant_edge_lab.discovery.v5.close_dislocation_postmortem import (
+        run_close_dislocation_postmortem,
+    )
+
+    report = run_close_dislocation_postmortem(Path.cwd())
+    console.print(f"family_status={report['family_status']}")
+    console.print(f"written={report.get('written')}")
+    console.print_json(data={k: report[k] for k in report if k != "written"})
 
 
 @disc_app.command("v5-status")

@@ -1,0 +1,69 @@
+# Immutable post-mortem. Does not alter reversal or continuation science YAML.
+family: close_dislocation
+family_status: CLOSED_NO_EDGE
+purpose: DESCRIPTIVE_POST_MORTEM_ONLY
+sealed_oos: inaccessible
+no_rescue: true
+no_retune: true
+no_new_close_dislocation_candidate: true
+
+reversal:
+  campaign: CLOSE_DISLOCATION_REVERSAL_V1
+  freeze_git: 47e8592b8d18438ed11741a637bba033b952855d
+  manifest: 8bca7cc6e6a7529be004267433616011e9799ec54ee1a09a71b16d4d3cc55875
+  gates: bfa3450a2f0a035ea979e86d2c298374ef7f9d4cb4a312656a7f75a1e182f88a
+  data_manifest: fd208f2a48228d4567100ed3b5e973a1226a4f7a58151ce5c873230cf5eb25e8
+  calendar: 434da4e718c19ddf7389125d2644741f3112ace1c2276478131c449f1f250ea1
+  outcome: FAILED
+  d3_evaluated: false
+
+continuation:
+  campaign: CLOSE_DISLOCATION_CONTINUATION_V1
+  freeze_git: b329dea50d1ca8d9707f0b8d72aaedf540a80f01
+  manifest: 2dde352f2582c58ef1fa7b158a1a8457ccc2d818545cfc1f53d26957f84eeb8b
+  gates: c44ce86782a5322cfa30ebcee36bcc9f62ec2a539fe1e0d66b7956b435741a59
+  data_manifest: fd208f2a48228d4567100ed3b5e973a1226a4f7a58151ce5c873230cf5eb25e8
+  execution_status: FROZEN
+  sealed_oos: inaccessible
+  d3_opened_once: true
+  d3: {start: '2024-10-11', end: '2026-10-01'}
+  outcome: FAILED
+  h1_h5: ALL_KILL
+  bh_survivor: false
+  research_pass: false
+  validated_subthreshold_phenomenon: false
+  primary_estimand_d3: equal_weight_trading_day_mean
+
+method_note: >
+  D1/D2 published continuation evidence used the older event-weighted reporting
+  path. Frozen continuation D3 used equal_weight_trading_day_mean. D1/D2 below
+  were recomputed on that same equal-day estimand. D3 mean_bp is copied from
+  frozen continuation final.json and was not recomputed. This does not change
+  any campaign decision.
+
+equal_day_postmortem_only:
+  H1_PRIMARY:
+    role: primary
+    D1_equal_day_mean_bp: 8.689430069724736
+    D2_equal_day_mean_bp: 9.063511417434912
+    D3_equal_day_mean_bp: -1.1968567947566027
+    apparent_continuation_under_equal_day: true
+  H2_ABS_Q95:
+    role: robustness
+    D1_equal_day_mean_bp: 10.027747192572075
+    D2_equal_day_mean_bp: 11.95192956833665
+    D3_equal_day_mean_bp: -0.8608738226450076
+    apparent_continuation_under_equal_day: true
+  H3_DISLOCATION_ONLY:
+    role: robustness
+    D1_equal_day_mean_bp: 7.514629073661424
+    D2_equal_day_mean_bp: 7.120772183475027
+    D3_equal_day_mean_bp: -1.8223760003603973
+    apparent_continuation_under_equal_day: true
+
+d3_existing_mean_bp:
+  H1_PRIMARY: -1.1968567947566027
+  H2_ABS_Q95: -0.8608738226450076
+  H3_DISLOCATION_ONLY: -1.8223760003603973
+  H4_Z2_RVOL: -2.4432018905369812
+  H5_Z2_ONLY: -2.1024154838464537

@@ -1,0 +1,32 @@
+# DESIGN_ONLY. Not frozen. Not approved. Do not execute.
+campaign_id: v5_options_local_rv
+version: v5_options_local_rv_v1
+science_id: v5_options_local_rv_same_expiry_strike_surface_v1
+status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+parent_campaigns: []
+close_dislocation_family: CLOSED_NO_EDGE
+note: >
+  DESIGN_ONLY draft after local OPRA audit. Not a live experiment.
+  Local data are OPRA minute aggregates only. No quotes, NBBO, IV, Greeks,
+  or open interest on disk. Do not execute until independent review.
+
+V5_OPTIONS_LOCAL_RV_V1:
+  mechanism_id: local_same_expiry_strike_surface_dislocation
+  hypothesis_family: options_local_relative_value
+  executable_claim: false
+  primary_space: price_mid_unavailable_use_trade_aggregate_close
+  preferred_space_if_quotes_arrive: iv_dislocation
+  neighborhood: same_underlying_same_expiry_same_cp_adjacent_strikes
+  min_neighbors_proposed: 2
+  interpolation_proposed: linear_in_strike_ex_ante
+  direction_rule: >
+    rich vs local neighborhood => expected relative underperformance / convergence;
+    cheap vs local neighborhood => expected relative outperformance / convergence.
+  primary_outcome_proposed: relative_contract_return_minus_neighborhood_return
+  hedge: same_expiry_neighbor_or_delta_proxy_from_price_grid_only
+  do_not_search: [cheap_options, high_IV, unusual_volume, RSI, momentum, technical_patterns]
+  lifecycle: [data_audit, synthetic_unit_tests, exploratory_discovery, freeze, chronological_validation, untouched_confirmation, execution_simulation, live_observation, tiny_live_capital]

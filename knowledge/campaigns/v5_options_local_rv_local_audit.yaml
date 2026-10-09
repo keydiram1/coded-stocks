@@ -1,0 +1,19 @@
+# Local OPRA inventory snapshot. Not an empirical result. Not frozen science.
+dataset: massive us_options_opra
+local_product_present: [minute_aggs_v1]
+local_product_absent: [day_aggs_v1, quotes_v1, trades_v1, nbbo_v1, underlying_quotes_v1]
+coverage: {first: '2024-10-07', last: '2026-10-07', n_days: 502}
+compressed_gb: 10.464
+median_file_bytes: 22403155
+schema_columns: [ticker, volume, open, close, high, low, window_start, transactions]
+granularity: minute_aggregate
+event_level: false
+quote_level: false
+sample_day: '2025-10-08'
+sample_day_rows: 3146769
+sample_unique_contracts: 321145
+sample_zero_volume_fraction: 0.0
+sample_median_minute_bars_per_contract: 2.0
+occ_parse_ok_fraction_sample: 1.0
+remote_entitled_prefixes: [day_aggs_v1, minute_aggs_v1, quotes_v1, trades_v1]
+readiness: READY_WITH_LIMITATIONS
