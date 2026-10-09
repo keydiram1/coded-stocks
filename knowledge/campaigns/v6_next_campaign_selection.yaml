@@ -1,0 +1,142 @@
+# V6 mechanism selection. DESIGN_ONLY. Not an experiment result.
+# Do not execute. Do not buy options quotes. Do not reopen close-dislocation.
+status: DESIGN_ONLY
+execution_status: NOT_APPROVED
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+close_dislocation_family: CLOSED_NO_EDGE
+options_local_rv: DESIGN_ONLY_NOT_READY
+recommended_next_campaign: IDIO_SHOCK_RETENTION_V1
+classification: READY_TO_IMPLEMENT_NEXT_EXPERIMENT
+
+prior_collision:
+  V1_gap_rvol_continuation: FAILED
+  V2_ohlcv_families_A_to_L: FAILED_survivors_empty
+  V2_A_impulse_pullback: ALREADY_TESTED
+  V2_B_breakout_accept_reject: ALREADY_TESTED
+  V2_E_volume_shock_resolution: ALREADY_TESTED
+  V2_G_opening_dislocation: ALREADY_TESTED
+  V2_I_two_attempt: ALREADY_TESTED
+  V3_news_xs: FAILED_57_of_57_KILL
+  V4_v4r_residual_leader_follower: FAILED_0_RESEARCH_PASS
+  V5_close_dislocation_reversal: FAILED
+  V5_close_dislocation_continuation: FAILED_D3_all_KILL
+  V5_options_local_rv: BLOCKED_no_historical_quotes
+
+candidates:
+  - id: IDIO_SHOCK_RETENTION_V1
+    name: idiosyncratic shock retention (information vs flow)
+    overlap: PARTIALLY_OVERLAPPING
+    overlap_note: >
+      Uses V5-style LOO residual construction and a path idea from V2, but the
+      state is retention of an identified shock after a wait window, not V2
+      pullback-band reacceleration, not V4 snapshot residual, not V5 close clock.
+    rationale: >
+      A short idiosyncratic impulse is a mix of information and temporary pressure.
+      After a completed wait, retained displacement is the information component;
+      dissipated displacement is exhausted flow. Direction follows that split.
+    signal_at_T: >
+      Completed impulse window residual, completed wait-window remaining residual,
+      retention ratio, all using bars whose first_available_at <= T. No current
+      unfinished minute.
+    expected_response: >
+      High retention => continuation of shock sign. Low retention => reversal of
+      shock sign. Impulse-only continuation is a control, not a promotion path.
+    horizon: 15m_primary after next completed-minute open
+    data_required: stock minute OHLCV plus causal beta/LOO
+    data_available: yes_2021-10-01_to_2026-10-01
+    confounders: [generic_momentum, volatility_scaling, open_close_regimes, ticker_clustering]
+    leakage: current_bar_if_impulse_uses_unfinished_minute
+    pit: instruments_parquet_not_session_dated
+    execution: next_bar_open_not_a_fill; wide_spreads_on_shocked_names
+    why_fail: retention_is_noisy_momentum; minute_path_inside_impulse_ambiguous
+    falsify: >
+      H1 mean<=0 on confirmation; or H1 does not beat impulse-only control;
+      or only H2 works and is then promoted (forbidden).
+    scores: {A: 4, B: 4, C: 3, D: 4, E: 4, F: 3, G: 3, total: 25}
+
+  - id: FAILED_IMPULSE_REVERSAL
+    name: failed hold after idiosyncratic extreme
+    overlap: ALREADY_TESTED
+    overlap_note: V2 B/I/E failed-move patterns. Not eligible as next primary.
+    rationale: Exhausted pressure; liquidity refill; price cannot hold extreme.
+    signal_at_T: impulse then inability to hold new high/low on completed bars
+    expected_response: reverse the impulse
+    horizon: 15m
+    data_required: stock minutes
+    data_available: yes
+    confounders: [generic_mean_reversion, V2_threshold_memory]
+    leakage: intra_bar_high_low_path_ambiguous
+    pit: listing_snapshot
+    execution: fade_after_spike_is_spread_hostile
+    why_fail: already_killed_as_V2_pattern
+    falsify: not_a_new_test
+    scores: {A: 3, B: 4, C: 1, D: 3, E: 4, F: 3, G: 3, total: 21}
+
+  - id: PREMARKET_PATH_ACCEPTANCE
+    name: premarket path accepted vs rejected at RTH
+    overlap: PARTIALLY_OVERLAPPING
+    overlap_note: V1 gap+RVOL continuation and V2 G opening dislocation.
+    rationale: Thin premarket discovery vs RTH liquidity; hold vs fade of overnight path.
+    signal_at_T: premarket path plus first completed RTH minutes hold/fade
+    expected_response: acceptance continues; rejection reverses overnight residual
+    horizon: open_to_15m_or_30m
+    data_required: premarket and RTH minutes
+    data_available: yes_but_premarket_sparse
+    confounders: [V1_gap, auction_prints, overnight_news]
+    leakage: 0930_bar_is_not_an_executable_open
+    pit: listing_snapshot
+    execution: open_auction_not_in_OHLCV
+    why_fail: recreates_gap_or_V2_G
+    falsify: same_as_gap_continuation
+    scores: {A: 4, B: 3, C: 2, D: 3, E: 3, F: 2, G: 3, total: 20}
+
+  - id: OPENING_PRICE_DISCOVERY_FAILURE
+    name: opening move hold vs collapse
+    overlap: ALREADY_TESTED
+    overlap_note: V2 family G eval_g. Survivors empty.
+    rationale: Opening imbalance; equilibrium discovered in first minutes.
+    signal_at_T: gap/open ret ranks then 09:35-09:49 hold vs collapse
+    expected_response: hold continues; collapse shorts
+    horizon: 15m_from_0950
+    data_required: stock minutes
+    data_available: yes
+    confounders: [gap, auction]
+    leakage: 0930_bar
+    pit: listing_snapshot
+    execution: auction
+    why_fail: already_tested
+    falsify: not_a_new_test
+    scores: {A: 3, B: 3, C: 1, D: 3, E: 3, F: 2, G: 3, total: 18}
+
+  - id: OPTIONS_UNSIGNED_ACTIVITY
+    name: option print activity leading the stock
+    overlap: NEW
+    overlap_note: Not previously tested. Scientifically invalid without quotes/side.
+    rationale: None defensible. Unsigned call/put volume is not signed flow.
+    signal_at_T: option minute volume/transactions only
+    expected_response: none_without_inventing_direction
+    horizon: n_a
+    data_required: quotes_or_signed_prints
+    data_available: aggregate_minutes_only
+    confounders: [unsigned_volume]
+    leakage: n_a
+    pit: n_a
+    execution: n_a
+    why_fail: no_directional_mechanism
+    falsify: class_rejected_a_priori
+    scores: {A: 1, B: 2, C: 5, D: 1, E: 3, F: 1, G: 2, total: 15}
+
+why_retention_beats_others: >
+  Highest total and the only candidate that is both measurable with stock
+  minutes and not a rerun of a failed V2 pattern family. It uses the V5
+  expected/observed/discrepancy template on an intraday shock instead of the
+  closed close-window. Premarket/open ideas collide with V1/V2 G. Failed-impulse
+  collides with V2 B/I. Options activity cannot be directional on aggregates.
+
+argument_against_retention: >
+  Retention may be a restatement of momentum: names still displaced after 10
+  minutes are names still trending. Minute OHLC also cannot sequence the
+  impulse bar. The control hypothesis H3_IMPULSE_ONLY exists to kill the
+  campaign if retention adds nothing. Shocked names are exactly where spreads
+  and slippage destroy paper 15m means.

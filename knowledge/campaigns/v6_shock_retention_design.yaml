@@ -1,0 +1,122 @@
+# DESIGN_ONLY. Not frozen. Not approved. Do not execute.
+campaign_id: v6_idio_shock_retention
+version: v6
+science_id: v6_intraday_idio_shock_retention_v1
+status: SIGNAL_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+parent_campaigns: []
+close_dislocation_family: CLOSED_NO_EDGE
+v5_options_local_rv: DESIGN_ONLY_NOT_READY
+note: >
+  DESIGN_ONLY for IDIO_SHOCK_RETENTION_V1. Do not run. Do not choose numeric
+  shock/retention cutoffs from confirmation. Do not promote the impulse-only
+  control. Do not reopen close-dislocation. Do not use options aggregates.
+
+IDIO_SHOCK_RETENTION_V1:
+  mechanism_id: idiosyncratic_shock_information_vs_flow
+  hypothesis_family: shock_retention
+  auction_claim: false
+  executable_claim: false
+  observation_clock: >
+    End of a completed RTH minute T1 after a completed impulse window and a
+    completed wait window. first_available_at = T1 bar close + 1 minute.
+    Entry research clock = next minute open. Never the impulse bar itself.
+  signal_formation: >
+    Impulse = LOO-market residual return over a completed contiguous minute
+    window (open of first bar to close of last bar). Wait = a subsequent
+    completed window. Remaining = LOO residual from impulse start through T1.
+    retention = remaining / impulse if impulse finite and nonzero, else null.
+    Market residual uses causal 20d beta and equal-weight LOO eligible peers,
+    inherited from V5 construction, not V4 sqrt-dollar weights.
+  direction_rule: >
+    H1 (primary): high retention => continue the sign of the impulse residual.
+    H2 (robustness): low retention => reverse the sign of the impulse residual.
+    H3 (control, not promotable): ignore retention; continue impulse sign.
+  primary_outcome: next_minute_open_to_15m
+  diagnostic_outcomes: [next_minute_open_to_5m, next_minute_open_to_30m]
+  eligibility:
+    inherit_from: V5_COMMON_STOCK_NASDAQ_NYSE_NYSE_AMERICAN
+    price_prev_close_min: 1.00
+    trailing_20d_median_rth_dollar_volume_min: 1000000
+    listing_pit: instruments.parquet_last_snapshot_not_session_dated
+    exclude_open_window: true
+    exclude_close_window: true
+    rth_impulse_eligible_clock: 10:00_to_14:00_ET
+    wait_window_must_finish_by: 14:30_ET
+    half_days: exclude
+  causal_feature_availability: >
+    Beta, LOO market, eligibility dollar volume, and prev_close use completed
+    prior sessions only. Impulse and wait use only minutes with
+    first_available_at <= T1.
+  event_policy: one_event_per_ticker_day
+  event_choice: first_qualifying_impulse_of_the_session
+  market_neutralization: loo_equal_weight_residual
+  impulse_window_minutes: TO_BE_SELECTED_IN_DISCOVERY
+  wait_window_minutes: TO_BE_SELECTED_IN_DISCOVERY
+  shock_abs_quantile: TO_BE_SELECTED_IN_DISCOVERY
+  high_retention_quantile: TO_BE_SELECTED_IN_DISCOVERY
+  low_retention_quantile: TO_BE_SELECTED_IN_DISCOVERY
+  do_not_use_v2_pullback_band: true
+  hypotheses:
+    - hypothesis_id: H1_HIGH_RETENTION_CONTINUATION
+      role: primary
+      retention: high
+      direction: continue_impulse_sign
+    - hypothesis_id: H2_LOW_RETENTION_REVERSAL
+      role: robustness
+      retention: low
+      direction: reverse_impulse_sign
+      do_not_promote_to_primary: true
+    - hypothesis_id: H3_IMPULSE_ONLY_CONTROL
+      role: control
+      retention: ignored
+      direction: continue_impulse_sign
+      do_not_promote_to_primary: true
+      falsifies_mechanism_if: H3_mean_ge_H1_mean_on_same_estimand
+  trial_count: 3
+  primary_estimand: equal_weight_trading_day_mean
+  inference_unit: trading_day
+  inference:
+    one_sided: greater_than_zero_on_signed_primary
+    bootstrap_daily_means: 1000
+    seed: 42
+    multiple_testing: BH
+    bh_q: 0.10
+    jointly_across: all_3
+  sample:
+    min_ticker_days: 750
+    min_trading_days: 100
+    min_tickers: 75
+    max_top_ticker_share: 0.50
+    min_win_rate: 0.48
+  economic_floor_bp: 12
+  economic_floor_note: inherited_research_standard_not_reoptimized
+  splits:
+    method: chronological_unsealed
+    warmup_last_day: '2021-10-28'
+    discovery_D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494, role: discovery_threshold_freeze}
+    validation_D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247, role: frozen_validation}
+    confirmation_D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494, role: confirmation}
+    sealed_oos: closed_do_not_open
+    d3_reuse_note: >
+      D3 was opened for close-dislocation reversal/continuation, a different
+      question and clock. It was not used to select shock-retention. It is
+      usable as chronological confirmation for this NEW question. It is not
+      a fourth OOS and not untouched-for-all-questions. Sealed OOS stays closed.
+  falsification:
+    - H1_signed_mean_le_0_on_D3
+    - H1_not_BH_survivor
+    - H3_control_mean_ge_H1
+    - H2_promoted_after_seeing_D1
+    - reopen_close_dislocation
+  execution_limitations:
+    - OHLCV_is_not_a_fill
+    - next_bar_open_is_research_clock_only
+    - shocked_names_have_wide_spreads
+    - short_leg_needs_borrow_not_in_data
+    - microcap_excluded_by_dollar_volume_but_still_not_NBBO
+    - capacity_unknown
+    - paper_15m_edge_must_exceed_spread_plus_slippage_later
