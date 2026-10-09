@@ -45,8 +45,10 @@ def retention_ratio(remaining: float | None, impulse: float | None) -> float | N
     return rem / imp
 
 
-def shock_z(impulse_residual: float | None, prior_20: list[float | None]) -> float | None:
+def shock_z(impulse_residual: float | None, prior_20: list[float | None] | None) -> float | None:
     if impulse_residual is None or not np.isfinite(float(impulse_residual)):
+        return None
+    if prior_20 is None:
         return None
     scale = residual_std_scale(prior_20, require_n=SCALE_LOOKBACK)
     if scale is None:

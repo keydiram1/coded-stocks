@@ -630,6 +630,12 @@ def discovery_campaign_v6(
         f"d3_if_h1_without_incremental={state['d3_if_h1_without_incremental']}"
     )
     console.print(f"hypotheses={state['hypotheses']}")
+    console.print(f"primary_estimand={state['primary_estimand']}")
+    console.print(f"calendar_actual={state['calendar_hash_actual']}")
+    console.print(f"calendar_expected={state['calendar_hash_expected']}")
+    console.print(
+        f"calendar_match={state['calendar_identity_match']} n_days={state['calendar_n_days']}"
+    )
     console.print(f"sealed_oos={state['sealed_oos']} execution_status={state['execution_status']}")
     console.print(f"launch={state['launch_command']}")
     console.print("SIGNAL_ONLY. STOP. Default does not run D1 or compute event counts.")

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
 from datetime import time
 from typing import Any
 
@@ -22,16 +21,17 @@ from quant_edge_lab.discovery.v6.clocks import (
     t1_bucket,
     wait_ok,
 )
+from quant_edge_lab.discovery.v6.history import SessionResidualHistory
 from quant_edge_lab.discovery.v6.residual import (
     equal_weight_loo,
     impulse_sign,
     market_residual,
     retention_ratio,
-    shock_z,
     simple_return,
 )
 
 PRIMARY_HORIZON = 15
+HistoryKey = tuple[str, str]
 
 
 def _closes(g: pl.DataFrame) -> dict[time, float]:
@@ -58,12 +58,6 @@ def candidate_starts(w_imp: int, w_wait: int) -> list[time]:
     return starts
 
 
-def window_return(closes: dict[time, float], start_px_t: time, end_t: time) -> float | None:
-    p0 = closes.get(start_px_t)
-    p1 = closes.get(end_t)
-    return simple_return(p1, p0)
-
-
 def signed_forward(fwd: float | None, sign: str | None, *, reverse: bool = False) -> float | None:
     if fwd is None or sign is None or not np.isfinite(float(fwd)):
         return None
@@ -78,13 +72,14 @@ def process_day(
     cell: dict[str, Any],
     *,
     betas: dict[str, float],
-    prior_clock: dict[str, dict[str, list[float | None]]],
+    history: SessionResidualHistory,
+    eligible: set[str] | None = None,
     min_rth_minutes: int = 380,
-) -> tuple[pl.DataFrame, dict[str, dict[str, float]]]:
-    """Return events for this cell and same-clock residuals for history update.
+) -> tuple[pl.DataFrame, dict[HistoryKey, float]]:
+    """Events for this cell plus sparse same-clock residuals for history push.
 
-    prior_clock[iid][clock_key] is the list of exactly-prior residuals caller
-    already sliced to 20 (or fewer). Missing/short lists yield null shock_z.
+    First qualifying signal (known at T1) reserves the ticker-day before any
+    future outcome bar is inspected.
     """
     sess = with_session(day_bars)
     if classify_trading_day(sess, min_rth_minutes=min_rth_minutes) != "FULL_RTH":
@@ -97,9 +92,11 @@ def process_day(
     low = float(cell["low_retention_max"])
     starts = candidate_starts(w_imp, w_wait)
     groups = {str(g["instrument_id"][0]): g for g in rth.partition_by("instrument_id")}
+    if eligible is not None:
+        groups = {iid: g for iid, g in groups.items() if iid in eligible}
     closes = {iid: _closes(g) for iid, g in groups.items()}
     opens = {iid: _opens(g) for iid, g in groups.items()}
-    clock_res: dict[str, dict[str, float]] = {iid: {} for iid in groups}
+    day_map: dict[HistoryKey, float] = {}
     taken: set[str] = set()
     rows: list[dict[str, Any]] = []
     day = str(rth["session_date"][0])
@@ -125,26 +122,24 @@ def process_day(
                 float(r_rem[j]) if np.isfinite(r_rem[j]) else None, beta, float(m_rem[j])
             )
             if imp is not None:
-                clock_res[iid][clock_key] = float(imp)
+                day_map[(iid, clock_key)] = float(imp)
             if iid in taken:
                 continue
-            hist = (prior_clock.get(iid) or {}).get(clock_key) or []
-            z = shock_z(imp, hist)
+            z = history.shock_z_for(iid, clock_key, imp)
             if z is None or abs(z) < z_min:
                 continue
             sgn = impulse_sign(imp)
             if sgn is None:
                 continue
-            ret = retention_ratio(rem, imp)
-            e_px = opens[iid].get(ent)
-            c_px = closes[iid].get(oc)
-            fwd = bar_return(c_px, e_px) if e_px and c_px else None
-            if fwd is None:
-                continue
             z_b = abs_z_bucket(abs(z))
             tod = t1_bucket(t1)
             if z_b is None or tod is None:
                 continue
+            taken.add(iid)
+            ret = retention_ratio(rem, imp)
+            e_px = opens[iid].get(ent)
+            c_px = closes[iid].get(oc)
+            fwd = bar_return(c_px, e_px) if e_px is not None and c_px is not None else None
             is_h1 = ret is not None and ret >= high
             is_h2 = ret is not None and ret <= low
             g = groups[iid]
@@ -173,10 +168,9 @@ def process_day(
                     "is_incremental_control": bool(ret is not None and ret < high),
                 }
             )
-            taken.add(iid)
     if not rows:
-        return pl.DataFrame(), clock_res
-    return pl.DataFrame(rows), clock_res
+        return pl.DataFrame(), day_map
+    return pl.DataFrame(rows), day_map
 
 
 def filter_hypothesis(events: pl.DataFrame, hid: str) -> pl.DataFrame:
@@ -191,31 +185,6 @@ def filter_hypothesis(events: pl.DataFrame, hid: str) -> pl.DataFrame:
     if hid == "H3_IMPULSE_ONLY_CONTROL":
         return events.filter(pl.col("is_h3"))
     raise KeyError(hid)
-
-
-def empty_clock_history() -> dict[str, dict[str, deque[float | None]]]:
-    return defaultdict(lambda: defaultdict(lambda: deque(maxlen=20)))
-
-
-def prior_lists(
-    hist: dict[str, dict[str, deque[float | None]]], iid: str, clock_key: str
-) -> list[float | None]:
-    return list(hist[iid][clock_key])
-
-
-def history_as_prior(
-    hist: dict[str, dict[str, deque[float | None]]],
-) -> dict[str, dict[str, list[float | None]]]:
-    return {iid: {k: list(v) for k, v in clocks.items()} for iid, clocks in hist.items()}
-
-
-def ingest_clock_residuals(
-    hist: dict[str, dict[str, deque[float | None]]],
-    clock_res: dict[str, dict[str, float]],
-) -> None:
-    for iid, clocks in clock_res.items():
-        for key, val in clocks.items():
-            hist[iid][key].append(float(val))
 
 
 def incremental_frames(events: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:

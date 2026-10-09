@@ -6,7 +6,7 @@ from typing import Any
 
 import polars as pl
 
-from quant_edge_lab.discovery.v5.evaluation import day_block_stats
+from quant_edge_lab.discovery.v5.continuation_stats import ESTIMAND, equal_weight_day_stats
 from quant_edge_lab.discovery.v6.events import filter_hypothesis, incremental_frames
 from quant_edge_lab.discovery.v6.incremental import incremental_stats, matched_day_deltas
 from quant_edge_lab.statistics.summarize import benjamini_hochberg
@@ -31,7 +31,9 @@ def evaluate_hypotheses(
     pvals = []
     for hid in HIDS:
         sub = filter_hypothesis(events, hid)
-        st = day_block_stats(sub, n_boot=n_boot, seed=seed)
+        st = equal_weight_day_stats(sub, n_boot=n_boot, seed=seed)
+        if st.get("primary_estimand") != ESTIMAND:
+            raise AssertionError("V6 hypotheses must use equal_weight_trading_day_mean")
         pvals.append(float(st["p_one_sided"]))
         rows.append({"hypothesis_id": hid, "stats": st})
     bh = benjamini_hochberg(pvals, q=bh_q)
