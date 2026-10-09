@@ -276,6 +276,11 @@ def test_synthetic_d3_does_not_touch_real_d3_files(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "quant_edge_lab.discovery.v5.continuation.load_pre_d3_event_partitions", boom
     )
+    fake_days = ["2024-11-01"]
+    monkeypatch.setattr(
+        "quant_edge_lab.discovery.v5.continuation_runner.require_continuation_calendar",
+        lambda *_a, **_k: {"days": fake_days},
+    )
     out = execute_v5_continuation(root, events=_synth_events(0.002))
     assert out["campaign_id"] == "v5_close_dislocation_continuation"
     assert out["science_id"] == SCIENCE_ID
@@ -319,6 +324,8 @@ def test_readiness_does_not_load_d3(monkeypatch):
     assert state["scale_requires_all_sessions"] is True
     assert state["primary_estimand"] == "equal_weight_trading_day_mean"
     assert state["bh_q"] == 0.10
+    assert state["calendar_identity_match"] is True
+    assert state["calendar_hash_actual"] == SOURCE_IDENTITY["calendar"]
     assert CAMPAIGN_ID in state["campaigns"]
 
 

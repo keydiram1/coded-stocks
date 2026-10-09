@@ -30,6 +30,7 @@ from quant_edge_lab.discovery.v5.continuation import (
     load_continuation_source_events,
     new_run_dir,
     refuse_discovery_split,
+    require_continuation_calendar,
 )
 from quant_edge_lab.discovery.v5.continuation_stats import ESTIMAND, equal_weight_day_stats
 from quant_edge_lab.discovery.v5.evaluation import evaluate_frozen, trial_count
@@ -61,6 +62,7 @@ def readiness_v5_continuation(root) -> dict[str, Any]:
     camp = campaign_block(man)
     rules = frozen_rules(camp)
     assert_frozen_thresholds(rules)
+    cal = require_continuation_calendar(root)
     return {
         "mode": "READINESS",
         "campaign_id": man["campaign_id"],
@@ -97,6 +99,10 @@ def readiness_v5_continuation(root) -> dict[str, Any]:
         "bh_q": gates["inference"]["bh_q"],
         "d3_start": man["splits"]["D3"]["start"],
         "d3_end": man["splits"]["D3"]["end"],
+        "calendar_hash_actual": cal["calendar_hash_actual"],
+        "calendar_hash_expected": cal["calendar_hash_expected"],
+        "calendar_identity_match": cal["calendar_identity_match"],
+        "calendar_n_days": cal["calendar_n_days"],
         "sealed_oos": man["sealed_oos"],
         "status": man["status"],
         "execution_status": man.get("execution_status") or gates.get("execution_status"),
@@ -190,14 +196,6 @@ def diagnostic_horizons(events: pl.DataFrame) -> dict[str, Any]:
     return out
 
 
-def continuation_research_calendar(root) -> list[str]:
-    from quant_edge_lab.discovery.campaign_v4 import research_days
-    from quant_edge_lab.discovery.v5.preflight import clip_to_panel
-
-    man, _gates = load_continuation(root)
-    return clip_to_panel(research_days(root), man)
-
-
 def execute_v5_continuation(
     root,
     *,
@@ -214,10 +212,15 @@ def execute_v5_continuation(
     rules = frozen_rules(camp)
     assert_frozen_thresholds(rules)
     source = assert_source_identity(root)
+    cal_rec = require_continuation_calendar(
+        root,
+        days=calendar,
+        parquet_exists=(lambda _d: True) if calendar is not None else None,
+    )
+    calendar = cal_rec["days"]
     if events is None:
         events = load_continuation_source_events(root)
-        calendar = continuation_research_calendar(root)
-    events = attach_normalized_dislocation(events, calendar=calendar or [])
+    events = attach_normalized_dislocation(events, calendar=calendar)
     events = attach_continuation(events)
     assert_continuation_negates_reversal(events)
     rows = evaluate_continuation_d3(events, rules, gates, split="D3")

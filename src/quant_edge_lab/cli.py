@@ -516,6 +516,11 @@ def discovery_campaign_v5_continuation(
         f"primary_estimand={state['primary_estimand']} "
         f"inference_unit={state['inference_unit']}"
     )
+    console.print(
+        f"calendar_hash={state['calendar_hash_actual']} "
+        f"match={state['calendar_identity_match']} "
+        f"n_days={state['calendar_n_days']}"
+    )
     console.print(f"bh_q={state['bh_q']} D3={state['d3_start']}..{state['d3_end']}")
     console.print(f"launch={state['launch_command']}")
     console.print("SIGNAL_ONLY. STOP. Default does not load D3 or run confirmation.")

@@ -93,6 +93,7 @@ def validate_research_calendar(
             raise CalendarError(f"missing normalized parquet for trading days e.g. {missing[:5]}")
     return {
         "n_days": len(ordered),
+        "days": ordered,
         "counts": {k: len(filter_days(ordered, k, man)) for k in SPLIT_ORDER},
         "calendar_hash": sha256_json(ordered),
         "first": ordered[0],

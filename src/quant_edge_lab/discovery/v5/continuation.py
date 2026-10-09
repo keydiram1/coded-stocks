@@ -21,7 +21,7 @@ from quant_edge_lab.discovery.v5.identity import (
     data_manifest_identity,
 )
 from quant_edge_lab.discovery.v5.models import CandidateRule, Direction
-from quant_edge_lab.hashing import sha256_file
+from quant_edge_lab.hashing import sha256_file, sha256_json
 
 CAMPAIGN_ID = "CLOSE_DISLOCATION_CONTINUATION_V1"
 MECHANISM_ID = "forced_eod_preclose_flow_continuation"
@@ -189,6 +189,47 @@ def assert_execution_approved(man: dict[str, Any], gates: dict[str, Any]) -> Non
             f"execute_v5_continuation refused: manifest.execution_status={ms} "
             f"gates.execution_status={gs} (both must be APPROVED or FROZEN)."
         )
+
+
+class CalendarIdentityError(RuntimeError):
+    pass
+
+
+def _parquet_exists_no_read(root: Path, day: str) -> bool:
+    from quant_edge_lab.data.massive.flatfiles import local_parquet_path
+
+    return local_parquet_path(root, day).exists()
+
+
+def require_continuation_calendar(
+    root: Path,
+    *,
+    days: list[str] | None = None,
+    parquet_exists=None,
+    expected: str | None = None,
+) -> dict[str, Any]:
+    """Validate panel calendar and pin it to SOURCE_IDENTITY['calendar']. No payloads."""
+    from quant_edge_lab.discovery.campaign_v4 import research_days
+    from quant_edge_lab.discovery.v5.preflight import validate_research_calendar
+
+    man, _gates = load_continuation(root)
+    raw = list(days) if days is not None else research_days(root)
+    exists = parquet_exists or (lambda d: _parquet_exists_no_read(root, d))
+    rec = validate_research_calendar(raw, man, parquet_exists=exists)
+    ordered = rec["days"]
+    actual = rec["calendar_hash"]
+    if actual != sha256_json(ordered):
+        raise CalendarIdentityError("calendar hash is not sha256_json of the validated day list")
+    need = expected if expected is not None else SOURCE_IDENTITY["calendar"]
+    if actual != need:
+        raise CalendarIdentityError(
+            f"calendar identity mismatch actual={actual} expected={need}"
+        )
+    rec["calendar_hash_actual"] = actual
+    rec["calendar_hash_expected"] = need
+    rec["calendar_identity_match"] = True
+    rec["calendar_n_days"] = rec["n_days"]
+    return rec
 
 
 def refuse_discovery_split(split: str) -> None:
