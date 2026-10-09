@@ -50,6 +50,11 @@ def test_v6_design_is_not_executable_and_does_not_reopen_closed_families():
     assert inc["no_cross_sign_matching"] is True
     assert inc["one_sided_strata_do_not_contribute"] is True
     assert inc["required_gate_on_h1"] == "day_delta_mean_gt_0"
+    assert inc["d1_requires"]["p_one_sided"] == "not_required"
+    assert inc["d2_d3_requires"]["p_one_sided_lt"] == 0.05
+    assert inc["d2_d3_requires"]["n_matched_days_min"] == 100
+    assert inc["economic_floor_on_delta"] == "none"
+    assert inc["hierarchical_not_fourth_hypothesis"] is True
     grid = camp["d1_grid"]
     n = 1
     for key in (
@@ -66,12 +71,16 @@ def test_v6_design_is_not_executable_and_does_not_reopen_closed_families():
     assert grid["confirmatory_hypotheses_after_freeze"] == 3
     assert grid["frozen_before_d1"] is True
     assert grid["d1_parameter_cells"] == 4
+    assert [c["id"] for c in grid["frozen_cells"]] == ["W5_W5", "W5_W15", "W15_W5", "W15_W15"]
     assert grid["confirmatory_hypotheses"] == 3
     assert grid["if_no_eligible_cell"] == "KILL_AT_D1"
     assert "H1_equal_day_mean_gt_0" in grid["cell_eligible_for_selection_iff"]
     assert "incremental_matched_day_delta_mean_gt_0" in grid["cell_eligible_for_selection_iff"]
     assert camp["multiplicity"]["discovery_d1_parameter_cells"] == 4
     assert camp["multiplicity"]["confirmatory_hypotheses_after_cell_freeze"] == 3
+    assert camp["multiplicity"]["confirmatory_signal_hypotheses"] == 3
+    assert camp["multiplicity"]["incremental_mechanism_gate"] == 1
+    assert camp["multiplicity"]["incremental_not_in_bh"] is True
     assert camp["multiplicity"]["d2_d3_bh_q"] == 0.10
     promo = camp["promotion"]
     assert promo["d1"]["if_no_eligible_cell"] == "KILL_AT_D1"
@@ -83,10 +92,20 @@ def test_v6_design_is_not_executable_and_does_not_reopen_closed_families():
         "H1_is_BH_survivor_q_0_10_across_H1_H2_H3"
     )
     assert promo["d2"]["incremental_day_delta_requirement"] == "day_delta_mean_gt_0"
+    assert promo["d2"]["incremental_p_one_sided_lt"] == 0.05
+    assert promo["d2"]["incremental_n_matched_days_min"] == 100
+    assert promo["d2"]["incremental_economic_floor"] == "none"
     assert promo["d3"]["open_only_if"] == "H1_survives_all_D2_primary_gates"
     assert promo["d3"]["economic_floor_bp"] == 12
     assert promo["d3"]["bh_q"] == 0.10
     assert promo["d3"]["incremental_day_delta_gate"] == "day_delta_mean_gt_0"
+    assert promo["d3"]["incremental_p_one_sided_lt"] == 0.05
+    assert promo["d3"]["incremental_n_matched_days_min"] == 100
+    assert (
+        promo["d3"]["if_h1_ge_12bp_but_incremental_unsupported"]
+        == "PRIMARY_SIGNAL_POSITIVE_BUT_RETENTION_NOT_INCREMENTAL"
+    )
+    assert "incremental_p_one_sided_lt_0.05" in promo["d3"]["RESEARCH_PASS_requires"]
     assert "H1_PRIMARY_itself_passes" in promo["d3"]["RESEARCH_PASS_requires"]
     assert promo["d3"]["h2_or_h3_pass_cannot_create_RESEARCH_PASS"] is True
     assert list(product(grid["impulse_window_minutes"], grid["wait_window_minutes"])) == [

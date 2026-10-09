@@ -588,6 +588,54 @@ def discovery_campaign_v5_continuation(
     raise typer.Exit(code=0)
 
 
+@disc_app.command("campaign-v6")
+def discovery_campaign_v6(
+    execute: bool = typer.Option(
+        False,
+        "--execute",
+        help="Forbidden until independent review. Default is readiness-only.",
+    ),
+) -> None:
+    """V6 market-residual shock retention. Default prints readiness and does not run D1."""
+    from quant_edge_lab.discovery.v6.runner import run_campaign_v6
+
+    root = Path.cwd()
+    if execute:
+        try:
+            state = run_campaign_v6(root, execute=True)
+        except RuntimeError as exc:
+            console.print(str(exc))
+            raise typer.Exit(code=1) from exc
+        payload = {k: state[k] for k in state if k != "identity"}
+        console.print(json.dumps(payload, default=str)[:4000])
+        return
+    state = run_campaign_v6(root, execute=False)
+    console.print(
+        f"READINESS v6 campaign_id={state['campaign_id']} science_id={state['science_id']}"
+    )
+    console.print(f"design={state['design_hash']} git={state['git']}")
+    console.print(f"data_manifest={state['data_manifest_hash']}")
+    console.print(f"primary_entry={state['primary_entry']} skip_open={state['skip_open']}")
+    console.print(f"primary_outcome={state['primary_outcome']}")
+    console.print(
+        f"d1_parameter_cells={state['d1_parameter_cells']} "
+        f"confirmatory_signal_hypotheses={state['confirmatory_signal_hypotheses']} "
+        f"incremental_mechanism_gate={state['incremental_mechanism_gate']}"
+    )
+    console.print(f"frozen_cells={[c['id'] for c in state['frozen_cells']]}")
+    console.print(f"d1_selection={state['d1_selection']} if_none={state['d1_if_none']}")
+    console.print(f"d2_guard={state['d2_open_d3_if_h1_fail']}")
+    console.print(
+        f"d2_incremental_p_lt={state['d2_incremental_p_lt']} "
+        f"d3_if_h1_without_incremental={state['d3_if_h1_without_incremental']}"
+    )
+    console.print(f"hypotheses={state['hypotheses']}")
+    console.print(f"sealed_oos={state['sealed_oos']} execution_status={state['execution_status']}")
+    console.print(f"launch={state['launch_command']}")
+    console.print("SIGNAL_ONLY. STOP. Default does not run D1 or compute event counts.")
+    raise typer.Exit(code=0)
+
+
 @disc_app.command("close-dislocation-postmortem")
 def discovery_close_dislocation_postmortem() -> None:
     """Descriptive equal-day D1/D2 recompute. Does not load D3. Does not change decisions."""

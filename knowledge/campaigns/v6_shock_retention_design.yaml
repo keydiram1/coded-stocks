@@ -162,6 +162,27 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
     day_delta: equal_weight_mean_of_valid_stratum_deltas_that_day
     estimand: equal_weight_trading_day_mean_of_day_deltas
     required_gate_on_h1: day_delta_mean_gt_0
+    hierarchical_not_fourth_hypothesis: true
+    cannot_rescue_h1: true
+    economic_floor_on_delta: none
+    inference:
+      n_matched_days: required
+      mean_day_delta: required
+      se_across_daily_deltas: required
+      hypothesis: one_sided_H0_mean_day_delta_le_0
+      p_one_sided: required
+      bootstrap_unit: trading_day
+      bootstrap_draws: 1000
+      bootstrap_seed: 42
+      same_philosophy_as_h1_equal_day: true
+    d1_requires:
+      mean_day_delta_gt_0: true
+      p_one_sided: not_required
+      n_matched_days_min: not_required
+    d2_d3_requires:
+      mean_day_delta_gt_0: true
+      p_one_sided_lt: 0.05
+      n_matched_days_min: 100
     h2_h3_cannot_satisfy_this_gate: true
 
   d1_grid:
@@ -179,6 +200,11 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
       z_2: inherited_abnormal_own_vol_convention_from_V5_continuation_scale
       high_0_50: majority_of_market_residual_shock_still_present
       low_0_00: shock_fully_given_back_or_reversed
+    frozen_cells:
+      - {id: W5_W5, impulse_window_minutes: 5, wait_window_minutes: 5, min_abs_shock_z: 2.0, high_retention_min: 0.50, low_retention_max: 0.00}
+      - {id: W5_W15, impulse_window_minutes: 5, wait_window_minutes: 15, min_abs_shock_z: 2.0, high_retention_min: 0.50, low_retention_max: 0.00}
+      - {id: W15_W5, impulse_window_minutes: 15, wait_window_minutes: 5, min_abs_shock_z: 2.0, high_retention_min: 0.50, low_retention_max: 0.00}
+      - {id: W15_W15, impulse_window_minutes: 15, wait_window_minutes: 15, min_abs_shock_z: 2.0, high_retention_min: 0.50, low_retention_max: 0.00}
     cartesian_combinations: 4
     d1_parameter_cells: 4
     d1_selection_looks: 4
@@ -205,12 +231,16 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
 
   multiplicity:
     discovery_d1_parameter_cells: 4
+    confirmatory_signal_hypotheses: 3
     confirmatory_hypotheses_after_cell_freeze: 3
     confirmatory_ids: [H1_HIGH_RETENTION_CONTINUATION, H2_LOW_RETENTION_REVERSAL, H3_IMPULSE_ONLY_CONTROL]
+    incremental_mechanism_gate: 1
+    incremental_mechanism_gate_role: hierarchical_required_on_H1
     d1_search_is_not_one_exploratory_look: true
     d2_d3_bh_q: 0.10
     d2_d3_bh_across: confirmatory_H1_H2_H3
     d1_cells_not_in_d2_d3_bh: true
+    incremental_not_in_bh: true
 
   trial_count_confirmatory: 3
   primary_outcome: T1_plus_2_open_to_15m
@@ -260,6 +290,9 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
       economic_floor_bp: 3
       economic_floor: inherited_V5_D2_3bp_not_reoptimized
       incremental_day_delta_requirement: day_delta_mean_gt_0
+      incremental_p_one_sided_lt: 0.05
+      incremental_n_matched_days_min: 100
+      incremental_economic_floor: none
       h1_fails_any_required_primary_gate: KILL_campaign_DO_NOT_OPEN_D3
       refit: false
       move_thresholds: false
@@ -274,6 +307,10 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
       economic_floor_bp: 12
       economic_floor: inherited_V5_D3_12bp_not_reoptimized
       incremental_day_delta_gate: day_delta_mean_gt_0
+      incremental_p_one_sided_lt: 0.05
+      incremental_n_matched_days_min: 100
+      incremental_economic_floor: none
+      if_h1_ge_12bp_but_incremental_unsupported: PRIMARY_SIGNAL_POSITIVE_BUT_RETENTION_NOT_INCREMENTAL
       sign_requirement: H1_equal_day_mean_gt_0
       require_sign_match_d2: true
       sample_gates: inherit_sample
@@ -287,6 +324,8 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
         - H1_D3_BH_survivor_q_0_10
         - H1_equal_day_mean_ge_12bp
         - incremental_day_delta_mean_gt_0
+        - incremental_p_one_sided_lt_0.05
+        - incremental_n_matched_days_ge_100
         - sample_and_concentration_gates
         - sign_positive_and_matches_D2
       h2_or_h3_pass_cannot_create_RESEARCH_PASS: true
@@ -307,7 +346,7 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
   campaign_success:
     requires: H1_PRIMARY_pass
     research_pass_rule: promotion.d3.RESEARCH_PASS_requires
-    h1_must_also: incremental_day_delta_mean_gt_0
+    h1_must_also: incremental_day_delta_mean_gt_0_and_p_lt_0.05_and_n_matched_days_ge_100
     h2_pass_h1_fail: secondary_observation_only_not_v6_success
     h3_pass_h1_fail: generic_impulse_continuation_only_not_v6_success
   falsification:
@@ -317,6 +356,9 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
     - H1_signed_mean_le_0_on_D3
     - H1_not_BH_survivor
     - incremental_day_delta_mean_le_0
+    - incremental_p_one_sided_ge_0.05_on_D2_or_D3
+    - incremental_n_matched_days_lt_100_on_D2_or_D3
+    - RESEARCH_PASS_without_incremental_inference
     - treated_positive_matched_to_negative_control
     - H2_or_H3_promoted_to_campaign_success
     - T1_plus_1_open_used_as_primary_entry
