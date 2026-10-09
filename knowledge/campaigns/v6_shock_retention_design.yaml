@@ -141,17 +141,26 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
   incremental_control:
     purpose: H1_must_add_information_beyond_large_shock_momentum
     method: stratify_then_within_stratum_difference
-    strata: shock_z_match_bucket_x_T1_30m_bucket
+    strata:
+      - sign_impulse_residual
+      - abs_shock_z_bucket
+      - T1_30m_et_bucket
+    sign_impulse_residual: [POSITIVE, NEGATIVE]
+    sign_rule: POSITIVE_if_impulse_residual_gt_0_NEGATIVE_if_lt_0
+    zero_residual_ineligible: true
+    abs_shock_z_buckets: shock_z_match_buckets
     treated: H1_events
     control: H3_events_in_stratum_with_retention_lt_high_retention_min
+    no_cross_sign_matching: true
     no_imputation: true
-    day_delta: >
-      For each trading day and stratum with at least one treated and one
-      control event, delta = equal-weight mean(treated signed primary)
-      minus equal-weight mean(control signed primary). Day value is the
-      equal-weight mean of such stratum deltas that day. Days with no
-      two-sided stratum do not contribute.
-    estimand: equal_weight_trading_day_mean_of_day_delta
+    one_sided_strata_do_not_contribute: true
+    stratum_delta: >
+      Within each day and two-sided stratum, delta =
+      mean(signed forward return of H1 treated)
+      minus
+      mean(signed forward return of eligible impulse-only controls).
+    day_delta: equal_weight_mean_of_valid_stratum_deltas_that_day
+    estimand: equal_weight_trading_day_mean_of_day_deltas
     required_gate_on_h1: day_delta_mean_gt_0
     h2_h3_cannot_satisfy_this_gate: true
 
@@ -171,17 +180,37 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
       high_0_50: majority_of_market_residual_shock_still_present
       low_0_00: shock_fully_given_back_or_reversed
     cartesian_combinations: 4
+    d1_parameter_cells: 4
     d1_selection_looks: 4
-    d1_selection_metric: H1_equal_weight_trading_day_mean_primary_signed
-    d1_does_not_use_h2_or_h3_for_selection: true
-    selection_rule: >
-      On D1 only, among the 4 cells that pass sample gates on H1, freeze
-      the single cell with the highest H1 equal-weight trading-day mean
-      on the primary 15m signed outcome. If none pass sample gates, KILL
-      at D1. Do not look at D2/D3. Do not add values.
+    confirmatory_hypotheses: 3
     confirmatory_hypotheses_after_freeze: 3
     total_effective_discovery_trials: 4
+    d1_does_not_use_h2_or_h3_for_selection: true
+    d1_significance_required: false
     no_threshold_after_d1_begins: true
+    cell_eligible_for_selection_iff:
+      - H1_passes_preregistered_sample_and_concentration_gates
+      - H1_equal_day_mean_gt_0
+      - incremental_matched_day_delta_mean_gt_0
+    selection_among_eligible: freeze_cell_with_maximum_H1_equal_day_mean
+    if_no_eligible_cell: KILL_AT_D1
+    selection_rule: >
+      Evaluate exactly the 4 frozen cells on D1. A cell is eligible only
+      if H1 passes sample/concentration gates AND H1 equal-day mean > 0
+      AND incremental matched day-delta mean > 0. Among eligible cells,
+      freeze the cell with maximum H1 equal-day mean. If none eligible:
+      KILL_AT_D1. Do not open D2 or D3. Do not select a cell with generic
+      momentum but no incremental retention effect. H2/H3 cannot become
+      primary. No new parameter values.
+
+  multiplicity:
+    discovery_d1_parameter_cells: 4
+    confirmatory_hypotheses_after_cell_freeze: 3
+    confirmatory_ids: [H1_HIGH_RETENTION_CONTINUATION, H2_LOW_RETENTION_REVERSAL, H3_IMPULSE_ONLY_CONTROL]
+    d1_search_is_not_one_exploratory_look: true
+    d2_d3_bh_q: 0.10
+    d2_d3_bh_across: confirmatory_H1_H2_H3
+    d1_cells_not_in_d2_d3_bh: true
 
   trial_count_confirmatory: 3
   primary_outcome: T1_plus_2_open_to_15m
@@ -202,8 +231,66 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
     min_tickers: 75
     max_top_ticker_share: 0.50
     min_win_rate: 0.48
+    counts_on: finite_primary_signed_only
   economic_floor_bp: 12
   economic_floor_note: inherited_research_standard_not_reoptimized
+
+  promotion:
+    sequence: [D1, D2, D3]
+    h1_remains_primary: true
+    h2_h3_cannot_become_primary: true
+    h2_h3_cannot_rescue: true
+    no_refit: true
+    no_window_or_threshold_changes_after_d1_freeze: true
+    d1:
+      evaluate: exactly_the_frozen_4_cell_grid
+      select_at_most: 1
+      freeze_selected_cell: true
+      if_no_eligible_cell: KILL_AT_D1
+      do_not_evaluate_d2_or_d3_if_kill: true
+      significance_threshold: none
+    d2:
+      evaluate: only_the_single_D1_frozen_cell
+      open_only_if: D1_selected_one_eligible_cell
+      subject: H1_PRIMARY
+      sample_gates: inherit_sample
+      concentration_gates: max_top_ticker_share_le_0.50
+      sign_requirement: H1_equal_day_mean_gt_0
+      statistical_requirement: H1_is_BH_survivor_q_0_10_across_H1_H2_H3
+      economic_floor_bp: 3
+      economic_floor: inherited_V5_D2_3bp_not_reoptimized
+      incremental_day_delta_requirement: day_delta_mean_gt_0
+      h1_fails_any_required_primary_gate: KILL_campaign_DO_NOT_OPEN_D3
+      refit: false
+      move_thresholds: false
+      flip_direction: false
+    d3:
+      open_only_if: H1_survives_all_D2_primary_gates
+      evaluate: exact_same_frozen_cell_features_entry_H1_H2_H3
+      refit: false
+      statistical_gate: H1_is_BH_survivor_q_0_10_across_H1_H2_H3
+      bh_q: 0.10
+      bh_across: confirmatory_H1_H2_H3
+      economic_floor_bp: 12
+      economic_floor: inherited_V5_D3_12bp_not_reoptimized
+      incremental_day_delta_gate: day_delta_mean_gt_0
+      sign_requirement: H1_equal_day_mean_gt_0
+      require_sign_match_d2: true
+      sample_gates: inherit_sample
+      concentration_gates: max_top_ticker_share_le_0.50
+      if_mean_le_0: KILL
+      if_not_bh_survivor: KILL
+      if_incremental_day_delta_le_0: KILL
+      if_bh_survivor_and_0_lt_mean_lt_12bp: VALIDATED_SUBTHRESHOLD_PHENOMENON_not_v6_success
+      RESEARCH_PASS_requires:
+        - H1_PRIMARY_itself_passes
+        - H1_D3_BH_survivor_q_0_10
+        - H1_equal_day_mean_ge_12bp
+        - incremental_day_delta_mean_gt_0
+        - sample_and_concentration_gates
+        - sign_positive_and_matches_D2
+      h2_or_h3_pass_cannot_create_RESEARCH_PASS: true
+
   splits:
     method: chronological_unsealed
     warmup_last_day: '2021-10-28'
@@ -219,13 +306,18 @@ MARKET_RESIDUAL_SHOCK_RETENTION_V1:
       is viewed. Sealed OOS remains untouched.
   campaign_success:
     requires: H1_PRIMARY_pass
+    research_pass_rule: promotion.d3.RESEARCH_PASS_requires
     h1_must_also: incremental_day_delta_mean_gt_0
     h2_pass_h1_fail: secondary_observation_only_not_v6_success
     h3_pass_h1_fail: generic_impulse_continuation_only_not_v6_success
   falsification:
+    - no_eligible_D1_cell
+    - H1_fails_any_D2_primary_gate
+    - D3_opened_without_H1_D2_survival
     - H1_signed_mean_le_0_on_D3
     - H1_not_BH_survivor
     - incremental_day_delta_mean_le_0
+    - treated_positive_matched_to_negative_control
     - H2_or_H3_promoted_to_campaign_success
     - T1_plus_1_open_used_as_primary_entry
     - reopen_close_dislocation
