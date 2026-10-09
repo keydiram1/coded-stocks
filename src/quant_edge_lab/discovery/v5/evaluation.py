@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -202,6 +203,7 @@ def evaluate_frozen(
     d2_means: dict[str, float] | None = None,
     d2_survivors: set[str] | None = None,
     preregistered_trial_count: int = 3,
+    stats_fn: Callable[..., dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     from quant_edge_lab.discovery.v5.campaigns.close_dislocation import apply_rule
 
@@ -215,7 +217,7 @@ def evaluate_frozen(
     pvals: list[float] = []
     for i, rule in enumerate(rules, start=1):
         sub = apply_rule(events, rule)
-        st = day_block_stats(
+        st = (stats_fn or day_block_stats)(
             sub,
             n_boot=int(gates["inference"]["bootstrap_draws"]),
             seed=int(gates["inference"]["bootstrap_seed"]),

@@ -11,6 +11,8 @@ frozen_before_empirical_execution: false
 
 primary_outcome: next_open_to_15m
 primary_horizon_minutes: 15
+primary_estimand: equal_weight_trading_day_mean
+inference_unit: trading_day
 economic_floor_bp: 12
 
 d3:
@@ -24,6 +26,8 @@ d3:
     mean <= 0 => KILL direction_failed. not D3 BH survivor => KILL d3_not_significant.
     BH survivor and 0 < mean < +12bp => VALIDATED_SUBTHRESHOLD_PHENOMENON.
     BH survivor and mean >= +12bp => RESEARCH_PASS.
+    The +12bp floor applies to the equal-weight mean of trading-day means.
+    Event median and event win_rate are event-level diagnostics/sample gates.
     Secondary horizons cannot change the decision.
 
 sample:
@@ -32,10 +36,14 @@ sample:
   min_tickers: 75
   max_top_ticker_share: 0.50
   min_win_rate: 0.48
+  win_rate_level: event
   counts_on: finite_primary_signed_only
 
 inference:
   association_unit: trading_day
+  inference_unit: trading_day
+  primary_estimand: equal_weight_trading_day_mean
+  bootstrap: resample_daily_means_equal_weight
   block: trading_day
   bootstrap_draws: 1000
   bootstrap_seed: 42

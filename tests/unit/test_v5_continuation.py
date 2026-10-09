@@ -72,6 +72,9 @@ def test_absolute_family_unchanged_and_normalized_family_separate():
     assert camp["total_trial_count"] == 5
     assert camp["normalized_scale"]["threshold_abs_z"] == 2.0
     assert camp["normalized_scale"]["lookback_sessions"] == 20
+    assert camp["normalized_scale"]["scale_lookback_sessions"] == 20
+    assert camp["normalized_scale"]["scale_requires_all_sessions"] is True
+    assert camp["primary_estimand"] == "equal_weight_trading_day_mean"
     vn = camp.get("volatility_normalization") or {}
     assert vn.get("in_this_campaign") is True
     assert man["execution_status"] == "NOT_APPROVED"
@@ -313,6 +316,8 @@ def test_readiness_does_not_load_d3(monkeypatch):
     assert state["trial_count"] == 5
     assert state["z_threshold_abs"] == 2.0
     assert state["scale_lookback_sessions"] == 20
+    assert state["scale_requires_all_sessions"] is True
+    assert state["primary_estimand"] == "equal_weight_trading_day_mean"
     assert state["bh_q"] == 0.10
     assert CAMPAIGN_ID in state["campaigns"]
 

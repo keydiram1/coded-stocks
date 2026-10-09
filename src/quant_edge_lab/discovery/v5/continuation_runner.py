@@ -31,7 +31,8 @@ from quant_edge_lab.discovery.v5.continuation import (
     new_run_dir,
     refuse_discovery_split,
 )
-from quant_edge_lab.discovery.v5.evaluation import day_block_stats, evaluate_frozen, trial_count
+from quant_edge_lab.discovery.v5.continuation_stats import ESTIMAND, equal_weight_day_stats
+from quant_edge_lab.discovery.v5.evaluation import evaluate_frozen, trial_count
 from quant_edge_lab.discovery.v5.models import CandidateRule
 from quant_edge_lab.discovery.v5.partitions import assert_sealed_oos_closed
 
@@ -89,6 +90,9 @@ def readiness_v5_continuation(root) -> dict[str, Any]:
         "normalized_family_trial_count": 2,
         "z_threshold_abs": Z_ABS,
         "scale_lookback_sessions": SCALE_LOOKBACK,
+        "scale_requires_all_sessions": True,
+        "primary_estimand": ESTIMAND,
+        "inference_unit": "trading_day",
         "normalized_scale_type": "same_clock_residual_std",
         "bh_q": gates["inference"]["bh_q"],
         "d3_start": man["splits"]["D3"]["start"],
@@ -125,6 +129,7 @@ def evaluate_continuation_d3(
         gates=gates,
         d2_survivors=ids,
         preregistered_trial_count=len(rules),
+        stats_fn=equal_weight_day_stats,
     )
 
 
@@ -139,10 +144,13 @@ def _public_hypothesis(row: dict[str, Any]) -> dict[str, Any]:
         "trading_days": st.get("trading_days"),
         "tickers": st.get("tickers"),
         "top_ticker_share": st.get("top_ticker_share"),
+        "primary_estimand": st.get("primary_estimand", ESTIMAND),
         "mean": st.get("mean"),
         "mean_bp": st.get("mean_bp"),
         "median": st.get("median"),
+        "event_median": st.get("event_median", st.get("median")),
         "win_rate": st.get("win_rate"),
+        "event_win_rate": st.get("event_win_rate", st.get("win_rate")),
         "se": st.get("se"),
         "ci": st.get("ci"),
         "p_one_sided": st.get("p_one_sided"),
@@ -176,10 +184,18 @@ def diagnostic_horizons(events: pl.DataFrame) -> dict[str, Any]:
                     dtype=pl.Float64,
                 )
             )
-        st = day_block_stats(work, col=signed_name, n_boot=20, seed=42)
+        st = equal_weight_day_stats(work, col=signed_name, n_boot=20, seed=42)
         st.pop("daily_means", None)
         out[col] = st
     return out
+
+
+def continuation_research_calendar(root) -> list[str]:
+    from quant_edge_lab.discovery.campaign_v4 import research_days
+    from quant_edge_lab.discovery.v5.preflight import clip_to_panel
+
+    man, _gates = load_continuation(root)
+    return clip_to_panel(research_days(root), man)
 
 
 def execute_v5_continuation(
@@ -187,6 +203,7 @@ def execute_v5_continuation(
     *,
     run_id: str = DEFAULT_RUN_ID,
     events: pl.DataFrame | None = None,
+    calendar: list[str] | None = None,
 ) -> dict[str, Any]:
     if run_id == SOURCE_RUN_ID:
         raise RuntimeError("refusing to write into frozen reversal run directory")
@@ -199,7 +216,8 @@ def execute_v5_continuation(
     source = assert_source_identity(root)
     if events is None:
         events = load_continuation_source_events(root)
-    events = attach_normalized_dislocation(events)
+        calendar = continuation_research_calendar(root)
+    events = attach_normalized_dislocation(events, calendar=calendar or [])
     events = attach_continuation(events)
     assert_continuation_negates_reversal(events)
     rows = evaluate_continuation_d3(events, rules, gates, split="D3")
@@ -228,6 +246,8 @@ def execute_v5_continuation(
         "normalized_family_trial_count": 2,
         "z_threshold_abs": Z_ABS,
         "scale_lookback_sessions": SCALE_LOOKBACK,
+        "scale_requires_all_sessions": True,
+        "primary_estimand": ESTIMAND,
         "note": (
             "D3 only. D1/D2 were not evaluated as confirmation. "
             "H4/H5 are a separate residual-z family. Secondary horizons are diagnostic only."

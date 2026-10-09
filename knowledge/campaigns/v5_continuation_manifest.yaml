@@ -78,22 +78,26 @@ CLOSE_DISLOCATION_CONTINUATION_V1:
   absolute_family_trial_count: 3
   normalized_family_trial_count: 2
   total_trial_count: 5
+  primary_estimand: equal_weight_trading_day_mean
+  inference_unit: trading_day
   normalized_scale:
     type: same_clock_residual_std
+    scale_lookback_sessions: 20
     lookback_sessions: 20
+    scale_requires_all_sessions: true
     threshold_abs_z: 2.0
     causal_only: true
     source: stored_event_discrepancy_from_source_run
     note: >
-      Denominator is sample std of the prior 20 finite stored same-clock
-      residuals for that instrument. Each stored discrepancy is
-      observed_final_5m − beta_available_at_that_session × eligible LOO
-      final-5m market. Pre-D3 event partitions are scale history only and
-      are not confirmation. Missing, zero, non-finite, or short history
-      makes z unavailable. No fill with 1, cross-section, market, current-day,
-      or future scale. This family asks whether the residual was abnormal
-      versus the name's own historical residual distribution, not whether
-      it exceeded a fixed return threshold.
+      Denominator is sample std (ddof=1) of stored same-clock residuals on the
+      EXACT 20 completed research-calendar sessions immediately before T.
+      Each stored discrepancy is observed_final_5m − beta_available_at_that
+      session × eligible LOO final-5m market. A finite residual is required
+      on every one of those 20 sessions. No reaching farther back, no
+      imputation, no raw-return substitute. Pre-D3 event partitions are scale
+      history only and are not confirmation. This family asks whether the
+      residual was abnormal versus the name's own historical residual
+      distribution, not whether it exceeded a fixed return threshold.
   hypotheses:
     - hypothesis_id: H1_PRIMARY
       role: primary

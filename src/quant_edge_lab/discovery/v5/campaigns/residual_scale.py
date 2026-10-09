@@ -1,8 +1,9 @@
 """Own-instrument residual scale for continuation H4/H5. H1–H3 stay on |discrepancy|.
 
-Scale is the sample std of prior stored same-clock residuals (`discrepancy`),
-each already computed as observed_final_5m − beta_t × eligible_LOO_final_5m
-at that historical session. Current-day and future residuals do not enter.
+Scale is the sample std of stored same-clock residuals on the EXACT previous
+N research-calendar sessions, each residual already
+observed_final_5m − beta_t × eligible_LOO_final_5m at that session.
+Missing any of those sessions makes z unavailable. No reaching back.
 """
 
 from __future__ import annotations
@@ -14,43 +15,51 @@ MIN_PRIOR = 20
 MAD_TO_SIGMA = 1.4826
 
 
-def _finite_prior(values: list[float | None]) -> list[float]:
-    out: list[float] = []
-    for v in values:
-        if v is None:
-            continue
-        x = float(v)
-        if np.isfinite(x):
-            out.append(x)
-    return out
+def prior_calendar_sessions(
+    day: str, calendar: list[str], *, lookback: int = MIN_PRIOR
+) -> list[str] | None:
+    """Exact `lookback` completed sessions immediately before `day` on the calendar."""
+    if day not in calendar:
+        return None
+    i = calendar.index(day)
+    if i < lookback:
+        return None
+    return list(calendar[i - lookback : i])
 
 
 def residual_std_scale(
-    prior_residuals: list[float | None], *, min_prior: int = MIN_PRIOR
+    window: list[float | None], *, require_n: int = MIN_PRIOR
 ) -> float | None:
-    """Sample std of prior same-clock 5m residuals. Insufficient history -> None."""
-    use = _finite_prior(prior_residuals)
-    if len(use) < min_prior:
+    """Sample std of an exact-length session window. Any missing/nonfinite -> None."""
+    if len(window) != require_n:
         return None
-    window = use[-min_prior:]
-    if np.allclose(window, window[0]):
+    vals: list[float] = []
+    for v in window:
+        if v is None or not np.isfinite(v):
+            return None
+        vals.append(float(v))
+    if np.allclose(vals, vals[0]):
         return None
-    s = float(np.std(window, ddof=1))
+    s = float(np.std(vals, ddof=1))
     if not np.isfinite(s) or s <= 0:
         return None
     return s
 
 
 def residual_mad_scale(
-    prior_residuals: list[float | None], *, min_prior: int = MIN_PRIOR
+    window: list[float | None], *, require_n: int = MIN_PRIOR
 ) -> float | None:
-    """Robust MAD scale. Recorded for a future campaign; not selected here."""
-    use = _finite_prior(prior_residuals)
-    if len(use) < min_prior:
+    """Robust MAD scale. Recorded; H4/H5 use sample std."""
+    if len(window) != require_n:
         return None
-    window = np.asarray(use[-min_prior:], dtype=float)
-    med = float(np.median(window))
-    mad = float(np.median(np.abs(window - med)))
+    vals: list[float] = []
+    for v in window:
+        if v is None or not np.isfinite(v):
+            return None
+        vals.append(float(v))
+    arr = np.asarray(vals, dtype=float)
+    med = float(np.median(arr))
+    mad = float(np.median(np.abs(arr - med)))
     s = MAD_TO_SIGMA * mad
     if not np.isfinite(s) or s <= 0:
         return None
@@ -67,58 +76,50 @@ def normalized_dislocation(residual: float | None, scale: float | None) -> float
     return r / s
 
 
-def prior_residuals_only(
-    history: list[tuple[str, float]],
-    *,
+def scale_for_event(
+    residuals_by_day: dict[str, float],
     day: str,
-) -> list[float | None]:
-    """history is (session_date, residual). Keep strictly earlier sessions."""
-    return [v for d, v in history if d < day]
-
-
-def update_residual_history(
-    history: dict[str, list[tuple[str, float]]],
+    calendar: list[str],
     *,
-    iid: str,
-    day: str,
-    residual: float | None,
     lookback: int = MIN_PRIOR,
-) -> None:
-    """Append after the signal day is complete. Do not use this update for today's scale."""
-    if residual is None or not np.isfinite(residual):
-        return
-    rec = history.setdefault(iid, [])
-    rec.append((day, float(residual)))
-    history[iid] = rec[-lookback:]
+) -> float | None:
+    sessions = prior_calendar_sessions(day, calendar, lookback=lookback)
+    if sessions is None:
+        return None
+    window = [residuals_by_day.get(s) for s in sessions]
+    return residual_std_scale(window, require_n=lookback)
 
 
 def attach_normalized_dislocation(
-    events: pl.DataFrame, *, min_prior: int = MIN_PRIOR
+    events: pl.DataFrame,
+    *,
+    calendar: list[str],
+    min_prior: int = MIN_PRIOR,
 ) -> pl.DataFrame:
-    """Attach residual_scale and normalized_dislocation. Causal in trading_date order."""
+    """Attach residual_scale and normalized_dislocation using the research calendar."""
     if events.height == 0:
         return events.with_columns(
             pl.lit(None).cast(pl.Float64).alias("residual_scale"),
             pl.lit(None).cast(pl.Float64).alias("normalized_dislocation"),
         )
-    ordered = events.with_row_index("_rid").sort(["instrument_id", "trading_date", "_rid"])
-    hist: dict[str, list[tuple[str, float]]] = {}
+    by_iid: dict[str, dict[str, float]] = {}
+    for row in events.iter_rows(named=True):
+        disc = row.get("discrepancy")
+        if disc is None or not np.isfinite(disc):
+            continue
+        iid = str(row["instrument_id"])
+        day = str(row["trading_date"])
+        by_iid.setdefault(iid, {})[day] = float(disc)
+    ordered = events.with_row_index("_rid")
     scales: list[float | None] = []
     zs: list[float | None] = []
     for row in ordered.iter_rows(named=True):
         iid = str(row["instrument_id"])
         day = str(row["trading_date"])
-        disc = row.get("discrepancy")
-        prior = prior_residuals_only(hist.get(iid, []), day=day)
-        scale = residual_std_scale(prior, min_prior=min_prior)
-        zs.append(normalized_dislocation(disc, scale))
+        scale = scale_for_event(by_iid.get(iid, {}), day, calendar, lookback=min_prior)
+        zs.append(normalized_dislocation(row.get("discrepancy"), scale))
         scales.append(scale)
-        update_residual_history(hist, iid=iid, day=day, residual=disc, lookback=min_prior)
-    return (
-        ordered.with_columns(
-            pl.Series("residual_scale", scales, dtype=pl.Float64),
-            pl.Series("normalized_dislocation", zs, dtype=pl.Float64),
-        )
-        .sort("_rid")
-        .drop("_rid")
-    )
+    return ordered.with_columns(
+        pl.Series("residual_scale", scales, dtype=pl.Float64),
+        pl.Series("normalized_dislocation", zs, dtype=pl.Float64),
+    ).drop("_rid")

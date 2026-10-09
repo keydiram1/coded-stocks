@@ -509,7 +509,12 @@ def discovery_campaign_v5_continuation(
     console.print(f"hypotheses={state['hypotheses']}")
     console.print(
         f"z_threshold_abs={state['z_threshold_abs']} "
-        f"scale_lookback={state['scale_lookback_sessions']}"
+        f"scale_lookback={state['scale_lookback_sessions']} "
+        f"scale_requires_all_sessions={state['scale_requires_all_sessions']}"
+    )
+    console.print(
+        f"primary_estimand={state['primary_estimand']} "
+        f"inference_unit={state['inference_unit']}"
     )
     console.print(f"bh_q={state['bh_q']} D3={state['d3_start']}..{state['d3_end']}")
     console.print(f"launch={state['launch_command']}")

@@ -28,3 +28,4 @@ manifests/**
 htmlcov/
 *.png
 !tests/fixtures/**
+tests/fixtures/__pycache__/
