@@ -31,4 +31,16 @@ def parse_occ_ticker(ticker: str) -> dict[str, Any] | None:
         "call_put": "call" if cp == "C" else "put",
         "strike": int(strike_raw) / 1000.0,
         "strike_raw": strike_raw,
+        "root_contains_digit": any(ch.isdigit() for ch in root),
     }
+
+
+def root_looks_adjusted(root: str | None) -> bool:
+    """Conservative: digit-in-root OSI codes often mark adjusted/nonstandard classes.
+
+    Flat files do not carry shares_per_contract. This is an exclusion heuristic,
+    not a positive identification of standard 100-share contracts.
+    """
+    if not root:
+        return True
+    return any(ch.isdigit() for ch in root)

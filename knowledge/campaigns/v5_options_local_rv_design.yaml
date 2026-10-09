@@ -1,7 +1,7 @@
 # DESIGN_ONLY. Not frozen. Not approved. Do not execute.
 campaign_id: v5_options_local_rv
 version: v5_options_local_rv_v1
-science_id: v5_options_local_rv_same_expiry_strike_surface_v1
+science_id: v5_options_local_rv_quote_snapshot_convexity_v1
 status: SIGNAL_ONLY
 execution_status: NOT_APPROVED
 reviewer_approval_required: true
@@ -10,23 +10,43 @@ sealed_oos: inaccessible
 parent_campaigns: []
 close_dislocation_family: CLOSED_NO_EDGE
 note: >
-  DESIGN_ONLY draft after local OPRA audit. Not a live experiment.
-  Local data are OPRA minute aggregates only. No quotes, NBBO, IV, Greeks,
-  or open interest on disk. Do not execute until independent review.
+  DESIGN_ONLY. Trade-minute option closes are rejected as the primary path:
+  neighboring last trades are asynchronous and selection-biased, and linear
+  interpolation in option price vs strike confuses convexity with mispricing.
+  Intended V1 path is synchronized OPRA quote snapshots, valid mids, completed-minute
+  underlying alignment, then arbitrage-aware local relative value (butterfly /
+  convexity PRIMARY). quotes_v1 is LIST-visible but GET-forbidden with current
+  keys, and one day is ~116 GiB compressed. Do not execute.
+
+rejected_primary_path:
+  id: trade_aggregate_price_close_linear_interpolation
+  status: REJECTED
+  reasons:
+    - asynchronous_last_trades_across_strikes
+    - trade_selection_bias
+    - linear_price_vs_strike_confuses_convexity_with_mispricing
 
 V5_OPTIONS_LOCAL_RV_V1:
-  mechanism_id: local_same_expiry_strike_surface_dislocation
+  mechanism_id: local_same_expiry_quote_convexity
   hypothesis_family: options_local_relative_value
   executable_claim: false
-  primary_space: price_mid_unavailable_use_trade_aggregate_close
-  preferred_space_if_quotes_arrive: iv_dislocation
+  primary_space: synchronized_quote_mids_butterfly_convexity
+  robustness_space_later: local_iv_residual_same_expiry_smile
   neighborhood: same_underlying_same_expiry_same_cp_adjacent_strikes
+  snapshot_clock_proposed: completed_minute_boundary
+  quote_rule_proposed: latest_quote_with_first_available_at_le_clock
+  underlying_rule_proposed: last_completed_stock_minute_available_at_same_clock
   min_neighbors_proposed: 2
-  interpolation_proposed: linear_in_strike_ex_ante
+  interpolation_proposed: not_linear_in_raw_option_price
   direction_rule: >
-    rich vs local neighborhood => expected relative underperformance / convergence;
-    cheap vs local neighborhood => expected relative outperformance / convergence.
-  primary_outcome_proposed: relative_contract_return_minus_neighborhood_return
-  hedge: same_expiry_neighbor_or_delta_proxy_from_price_grid_only
+    rich vs local convexity-consistent neighborhood => expected relative
+    underperformance / convergence; cheap => expected relative outperformance.
+  primary_outcome_proposed: relative_structure_pnl_not_raw_option_return
   do_not_search: [cheap_options, high_IV, unusual_volume, RSI, momentum, technical_patterns]
-  lifecycle: [data_audit, synthetic_unit_tests, exploratory_discovery, freeze, chronological_validation, untouched_confirmation, execution_simulation, live_observation, tiny_live_capital]
+  not_yet_frozen:
+    - stale_quote_limit
+    - spread_limit
+    - moneyness_limit
+    - dte_limit
+    - z_threshold
+  lifecycle: [data_audit, quotes_entitlement, synthetic_unit_tests, exploratory_discovery, freeze, chronological_validation, untouched_confirmation, execution_simulation, live_observation, tiny_live_capital]

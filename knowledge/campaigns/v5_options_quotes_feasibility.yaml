@@ -1,0 +1,19 @@
+# LIST-only quotes_v1 inventory. GET of quote objects returned 403. Not science.
+prefix: us_options_opra/quotes_v1/
+key_convention: us_options_opra/quotes_v1/YYYY/MM/YYYY-MM-DD.csv.gz
+earliest_date: '2022-03-07'
+latest_date: '2026-10-07'
+n_files: 1153
+compressed_bytes:
+  min: 1819150280
+  median: 100892226562
+  p90: 144851508491
+  max: 235124287721
+  total_gb: 113280.703
+audit_day: '2025-10-08'
+audit_day_key: us_options_opra/quotes_v1/2025/10/2025-10-08.csv.gz
+audit_day_compressed_bytes: 124333386642
+head_get_http: 403
+schema_observed: false
+readiness: NOT_READY
+full_day_download: refused

@@ -255,6 +255,19 @@ def massive_audit_options_flatfiles() -> None:
     console.print_json(data=report)
 
 
+@massive_app.command("audit-options-quotes")
+def massive_audit_options_quotes() -> None:
+    """LIST quotes_v1 and probe GET entitlement. Does not bulk download. No alpha."""
+    from quant_edge_lab.data.massive.options_quotes_feasibility import (
+        run_quotes_feasibility,
+    )
+
+    report = run_quotes_feasibility(Path.cwd())
+    console.print(f"readiness={report.get('readiness')}")
+    console.print(f"written={report.get('written')}")
+    console.print_json(data={k: report[k] for k in report if k != "written"})
+
+
 @hyp_app.command("list")
 def hypotheses_list() -> None:
     from quant_edge_lab.discovery.catalog import all_families, write_registry
