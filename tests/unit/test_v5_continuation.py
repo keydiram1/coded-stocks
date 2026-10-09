@@ -33,7 +33,6 @@ from quant_edge_lab.discovery.v5.continuation_runner import (
     evaluate_continuation_d3,
     execute_v5_continuation,
     readiness_v5_continuation,
-    run_campaign_v5_continuation,
 )
 from quant_edge_lab.discovery.v5.evaluation import decide
 from quant_edge_lab.discovery.v5.manifest import GATES_REL as REVERSAL_GATES
@@ -65,7 +64,7 @@ def test_continuation_signed_negates_reversal_primary_signed():
 
 
 def test_absolute_family_unchanged_and_normalized_family_separate():
-    man, _g = load_continuation(Path("."))
+    man, gates = load_continuation(Path("."))
     camp = man[man["primary_campaign"]]
     assert camp["absolute_family_trial_count"] == 3
     assert camp["normalized_family_trial_count"] == 2
@@ -77,7 +76,10 @@ def test_absolute_family_unchanged_and_normalized_family_separate():
     assert camp["primary_estimand"] == "equal_weight_trading_day_mean"
     vn = camp.get("volatility_normalization") or {}
     assert vn.get("in_this_campaign") is True
-    assert man["execution_status"] == "NOT_APPROVED"
+    assert man["execution_status"] == "FROZEN"
+    assert gates["execution_status"] == "FROZEN"
+    assert man["frozen_before_empirical_execution"] is True
+    assert gates["frozen_before_empirical_execution"] is True
 
 
 def test_frozen_thresholds_cannot_drift():
@@ -142,12 +144,14 @@ def test_execute_refuses_not_approved():
     from quant_edge_lab.discovery.v5.continuation import assert_execution_approved
 
     man, gates = load_continuation(Path("."))
-    assert man["execution_status"] == "NOT_APPROVED"
-    assert gates["execution_status"] == "NOT_APPROVED"
+    assert man["execution_status"] == "FROZEN"
+    assert gates["execution_status"] == "FROZEN"
+    assert_execution_approved(man, gates)
     with pytest.raises(RuntimeError, match="refused"):
-        assert_execution_approved(man, gates)
-    with pytest.raises(RuntimeError, match="refused"):
-        run_campaign_v5_continuation(Path("."), execute=True)
+        assert_execution_approved(
+            {**man, "execution_status": "NOT_APPROVED"},
+            {**gates, "execution_status": "NOT_APPROVED"},
+        )
 
 
 def test_source_identity_mismatch_refuses(tmp_path: Path):
@@ -314,7 +318,7 @@ def test_readiness_does_not_load_d3(monkeypatch):
     )
     state = readiness_v5_continuation(Path("."))
     assert state["mode"] == "READINESS"
-    assert state["execution_status"] == "NOT_APPROVED"
+    assert state["execution_status"] == "FROZEN"
     assert state["evaluable_split"] == "D3"
     assert state["h1_role"] == "primary"
     assert state["sealed_oos"] == "inaccessible"
@@ -334,16 +338,28 @@ def test_original_reversal_campaign_yaml_unmodified():
     assert sha256_file(Path(".") / REVERSAL_GATES) == SOURCE_IDENTITY["gates"]
 
 
-def test_not_approved_refuses_real_d3_and_pre_d3_loads():
+def test_not_approved_refuses_real_d3_and_pre_d3_loads(tmp_path: Path):
     from quant_edge_lab.discovery.v5.continuation import (
         load_d3_event_partitions,
         load_pre_d3_event_partitions,
     )
 
+    dest = tmp_path / "knowledge" / "campaigns"
+    dest.mkdir(parents=True)
+    man_text = (Path(".") / MANIFEST_REL).read_text(encoding="utf-8")
+    gates_text = (Path(".") / GATES_REL).read_text(encoding="utf-8")
+    (dest / "v5_continuation_manifest.yaml").write_text(
+        man_text.replace("execution_status: FROZEN", "execution_status: NOT_APPROVED", 1),
+        encoding="utf-8",
+    )
+    (dest / "v5_continuation_gates.yaml").write_text(
+        gates_text.replace("execution_status: FROZEN", "execution_status: NOT_APPROVED", 1),
+        encoding="utf-8",
+    )
     with pytest.raises(RuntimeError, match="refused"):
-        load_d3_event_partitions(Path("."))
+        load_d3_event_partitions(tmp_path)
     with pytest.raises(RuntimeError, match="refused"):
-        load_pre_d3_event_partitions(Path("."))
+        load_pre_d3_event_partitions(tmp_path)
 
 
 def test_normalized_rules_do_not_change_absolute_h1_h2_h3():

@@ -110,7 +110,7 @@ def readiness_v5_continuation(root) -> dict[str, Any]:
         "launch_command": "python -m quant_edge_lab discovery campaign-v5-continuation --execute",
         "note": (
             "Default command does not run confirmation. SIGNAL_ONLY. "
-            "D3 payload is not loaded. Sealed OOS closed. execution_status=NOT_APPROVED."
+            "D3 payload is not loaded. Sealed OOS closed. execution_status=FROZEN."
         ),
     }
 

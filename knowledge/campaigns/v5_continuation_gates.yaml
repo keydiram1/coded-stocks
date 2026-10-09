@@ -1,13 +1,13 @@
-# Continuation confirmation gates. SIGNAL_ONLY. NOT_APPROVED.
+# Continuation confirmation gates. SIGNAL_ONLY. FROZEN.
 # Sample/inference numbers copied from frozen V5; D3 floor remains +12bp.
 # D1/D2 are not confirmation splits for this campaign.
 version: v5_gates_close_dislocation_continuation_v1
 campaign: CLOSE_DISLOCATION_CONTINUATION_V1
 status: SIGNAL_ONLY
-execution_status: NOT_APPROVED
+execution_status: FROZEN
 thresholds_status: INHERITED_FROM_REVERSAL_D1_FREEZE
 reviewer_approval_required: true
-frozen_before_empirical_execution: false
+frozen_before_empirical_execution: true
 
 primary_outcome: next_open_to_15m
 primary_horizon_minutes: 15

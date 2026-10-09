@@ -2,9 +2,9 @@ campaign_id: v5_close_dislocation_continuation
 version: v5_continuation
 science_id: v5_close_dislocation_continuation_confirmation_v1
 status: SIGNAL_ONLY
-execution_status: NOT_APPROVED
+execution_status: FROZEN
 reviewer_approval_required: true
-frozen_before_empirical_execution: false
+frozen_before_empirical_execution: true
 sealed_oos: inaccessible
 parent_campaign: CLOSE_DISLOCATION_REVERSAL_V1
 parent_campaigns:
