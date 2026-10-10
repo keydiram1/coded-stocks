@@ -18,7 +18,9 @@ def test_v6_design_is_not_executable_and_does_not_reopen_closed_families():
     assert sel["close_dislocation_family"] == "CLOSED_NO_EDGE"
     assert sel["options_local_rv"] == "DESIGN_ONLY_NOT_READY"
     assert sel["execution_status"] == "NOT_APPROVED"
-    assert des["execution_status"] == "NOT_APPROVED"
+    assert des["status"] == "SIGNAL_ONLY"
+    assert des["execution_status"] == "FROZEN"
+    assert des["frozen_before_empirical_execution"] is True
     assert des["sealed_oos"] == "inaccessible"
     assert "IDIO_SHOCK_RETENTION_V1" not in des
     camp = des["MARKET_RESIDUAL_SHOCK_RETENTION_V1"]

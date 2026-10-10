@@ -3,9 +3,9 @@ campaign_id: v6_market_residual_shock_retention
 version: v6
 science_id: v6_market_residual_shock_retention_v1
 status: SIGNAL_ONLY
-execution_status: NOT_APPROVED
+execution_status: FROZEN
 reviewer_approval_required: true
-frozen_before_empirical_execution: false
+frozen_before_empirical_execution: true
 sealed_oos: inaccessible
 parent_campaigns: []
 close_dislocation_family: CLOSED_NO_EDGE

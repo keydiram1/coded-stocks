@@ -300,10 +300,10 @@ def test_readiness_does_not_execute_or_read_payloads(monkeypatch):
     assert out["calendar_hash_expected"] == EXPECTED_CALENDAR_HASH
     assert out["calendar_identity_match"] is True
     assert out["primary_estimand"] == "equal_weight_trading_day_mean"
-    assert out["execution_status"] == "NOT_APPROVED"
-    with pytest.raises(RuntimeError, match="execute_v6 refused"):
+    assert out["execution_status"] == "FROZEN"
+    with pytest.raises(AssertionError, match="run_d1_execute must not run"):
         run_campaign_v6(Path("."), execute=True)
-    assert called == []
+    assert called == ["d1"]
 
 
 def test_d1_loadable_days_stop_before_d2():
