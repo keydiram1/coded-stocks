@@ -45,6 +45,23 @@ def wait_ok(start: time, w_imp: int, w_wait: int) -> bool:
     return wait_end(start, w_imp, w_wait) <= WAIT_END_MAX
 
 
+def inclusive_minutes(start: time, end: time) -> list[time]:
+    """Inclusive ET minute labels from start through end."""
+    if _hhmm(end) < _hhmm(start):
+        raise ValueError("inclusive_minutes end before start")
+    out: list[time] = []
+    t = start
+    while True:
+        out.append(t)
+        if t == end:
+            return out
+        t = add_minutes(t, 1)
+
+
+def has_contiguous_closes(closes: dict[time, float], start: time, end: time) -> bool:
+    return all(t in closes for t in inclusive_minutes(start, end))
+
+
 def p0_time(impulse_start: time) -> time:
     return add_minutes(impulse_start, -1)
 

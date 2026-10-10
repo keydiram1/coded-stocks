@@ -13,6 +13,7 @@ from quant_edge_lab.discovery.v5.session import classify_trading_day, rth_only, 
 from quant_edge_lab.discovery.v6.clocks import (
     abs_z_bucket,
     entry_time,
+    has_contiguous_closes,
     impulse_window_ok,
     outcome_close_time,
     p0_time,
@@ -117,7 +118,8 @@ def compute_impulse_map(
         resid = window_residuals(closes, peers, p0t, p1t, betas)
         ck = impulse_clock_key(w_imp, t0)
         for iid, imp in resid.items():
-            day_map[(iid, ck)] = imp
+            if has_contiguous_closes(closes[iid], p0t, p1t):
+                day_map[(iid, ck)] = imp
     return day_map
 
 
@@ -162,7 +164,8 @@ def process_day(
     rows: list[dict[str, Any]] = []
     day = str(rth["session_date"][0])
     for t0 in candidate_starts(w_imp, w_wait):
-        p0t, p1t, p2t = p0_time(t0), p1_time(t0, w_imp), p2_time(t0, w_imp, w_wait)
+        p0t = p0_time(t0)
+        p2t = p2_time(t0, w_imp, w_wait)
         rem_peers = window_peer_ids(closes, p0t, p2t)
         rem_by = window_residuals(closes, rem_peers, p0t, p2t, betas)
         ck = impulse_clock_key(w_imp, t0)
@@ -174,7 +177,7 @@ def process_day(
         targets = [
             iid
             for iid, c in closes.items()
-            if p0t in c and p1t in c and p2t in c and iid not in taken
+            if iid not in taken and has_contiguous_closes(c, p0t, p2t)
         ]
         for iid in targets:
             imp = impulse_map.get((iid, ck))

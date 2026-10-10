@@ -13,10 +13,17 @@ from quant_edge_lab.discovery.v6.calendar import (
     calendar_manifest,
     d1_loadable_days,
 )
-from quant_edge_lab.discovery.v6.clocks import decision_ts_entry, entry_time, t1_bucket
+from quant_edge_lab.discovery.v6.clocks import (
+    decision_ts_entry,
+    entry_time,
+    has_contiguous_closes,
+    inclusive_minutes,
+    t1_bucket,
+)
 from quant_edge_lab.discovery.v6.design import frozen_cells, load_v6
 from quant_edge_lab.discovery.v6.evaluate import evaluate_hypotheses
 from quant_edge_lab.discovery.v6.events import (
+    compute_impulse_map,
     process_day,
     signed_forward,
     window_peer_ids,
@@ -497,3 +504,60 @@ def test_target_missing_p0_p1_or_p2_is_not_an_event():
         aaa = ev.filter(pl.col("instrument_id") == "AAA")
         if aaa.height:
             assert aaa["impulse_start"][0] != "10:00"
+
+
+def test_w5_w5_requires_every_minute_p0_through_p2():
+    labels = inclusive_minutes(time(9, 59), time(10, 9))
+    assert [t.strftime("%H:%M") for t in labels] == [
+        "09:59",
+        "10:00",
+        "10:01",
+        "10:02",
+        "10:03",
+        "10:04",
+        "10:05",
+        "10:06",
+        "10:07",
+        "10:08",
+        "10:09",
+    ]
+    hist = _hist_filled(("AAA", "BBB", "CCC"))
+    betas = {"AAA": 1.0, "BBB": 1.0, "CCC": 1.0}
+    names = {"AAA": 100.0, "BBB": 100.0, "CCC": 100.0}
+    complete, _ = process_day(_rth_day("2022-01-03", names), CELL, betas=betas, history=hist)
+    aaa = complete.filter(pl.col("instrument_id") == "AAA")
+    assert aaa.height == 1
+    assert aaa["impulse_start"][0] == "10:00"
+    for drop_t, why in ((time(10, 2), "impulse"), (time(10, 7), "wait")):
+        ev, _ = process_day(
+            _rth_day("2022-01-03", names, drop={"AAA": drop_t}),
+            CELL,
+            betas=betas,
+            history=hist,
+        )
+        aaa_m = ev.filter(pl.col("instrument_id") == "AAA")
+        if aaa_m.height:
+            assert aaa_m["impulse_start"][0] != "10:00", why
+        else:
+            assert True, why
+
+
+def test_impulse_history_requires_contiguous_p0_through_p1():
+    p0, p1 = time(9, 59), time(10, 4)
+    closes_ok = {
+        "AAA": {t: 100.0 + (20.0 if t >= time(10, 0) else 0.0) for t in inclusive_minutes(p0, p1)},
+        "BBB": {t: 100.0 for t in inclusive_minutes(p0, p1)},
+        "CCC": {t: 100.0 for t in inclusive_minutes(p0, p1)},
+    }
+    closes_gap = {
+        "AAA": {t: px for t, px in closes_ok["AAA"].items() if t != time(10, 2)},
+        "BBB": closes_ok["BBB"],
+        "CCC": closes_ok["CCC"],
+    }
+    betas = {"AAA": 1.0, "BBB": 1.0, "CCC": 1.0}
+    ok = compute_impulse_map(closes_ok, w_imp=5, betas=betas)
+    gap = compute_impulse_map(closes_gap, w_imp=5, betas=betas)
+    assert ("AAA", "5:10:00") in ok
+    assert ("AAA", "5:10:00") not in gap
+    assert has_contiguous_closes(closes_ok["AAA"], p0, p1)
+    assert not has_contiguous_closes(closes_gap["AAA"], p0, p1)
