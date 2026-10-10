@@ -27,7 +27,7 @@ from quant_edge_lab.discovery.v6.calendar import assert_no_future_splits, d1_loa
 from quant_edge_lab.discovery.v6.design import campaign_block, frozen_cells
 from quant_edge_lab.discovery.v6.evaluate import evaluate_hypotheses
 from quant_edge_lab.discovery.v6.events import process_day
-from quant_edge_lab.discovery.v6.history import SessionResidualHistory
+from quant_edge_lab.discovery.v6.history import HistoryKey, SessionResidualHistory
 from quant_edge_lab.discovery.v6.selection import select_d1_cell
 from quant_edge_lab.features.v4r.beta import BETA_WINDOW, beta_from_history
 
@@ -91,9 +91,11 @@ def walk_d1(
     listed = listed_ids(instruments, cfg)
     elig_hist: dict[str, dict[str, list[tuple[str, float]]]] = {}
     beta_panels: list[pl.DataFrame] = []
-    histories = {c["id"]: SessionResidualHistory() for c in cells}
+    w_imps = sorted({int(c["impulse_window_minutes"]) for c in cells})
+    histories = {w: SessionResidualHistory() for w in w_imps}
     events_by_cell: dict[str, list[pl.DataFrame]] = {c["id"]: [] for c in cells}
     for day in days:
+        impulse_today: dict[int, dict[HistoryKey, float]] = {}
         if day not in calendar:
             raise RuntimeError(f"{day} is not on the pinned research calendar")
         bars = load_day(day)
@@ -116,19 +118,25 @@ def walk_d1(
                 bars,
                 cell,
                 betas=beta_map,
-                history=histories[cell["id"]],
+                history=histories[int(cell["impulse_window_minutes"])],
                 eligible=elig,
                 min_rth_minutes=min_rth_minutes,
+                impulse_map=impulse_today.get(int(cell["impulse_window_minutes"])),
             )
-            histories[cell["id"]].push(day_map)
+            w_imp = int(cell["impulse_window_minutes"])
+            impulse_today[w_imp] = day_map
             if split in emit_splits and ev.height:
                 events_by_cell[cell["id"]].append(ev)
-        panel = daily_panel_from_session(sess, eligible=elig)
+        for w_imp in histories:
+            histories[w_imp].push(impulse_today.get(w_imp, {}))
+        panel = daily_panel_from_session(sess, eligible=listed)
         if panel.height:
             beta_panels.append(panel)
             if len(beta_panels) > BETA_WINDOW:
                 beta_panels = beta_panels[-BETA_WINDOW:]
         for iid in iids:
+            if listed is not None and iid not in listed:
+                continue
             g = rth.filter(pl.col("instrument_id") == iid)
             update_elig_hist(
                 elig_hist,

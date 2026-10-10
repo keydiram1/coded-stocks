@@ -16,7 +16,12 @@ from quant_edge_lab.discovery.v6.calendar import (
 from quant_edge_lab.discovery.v6.clocks import decision_ts_entry, entry_time, t1_bucket
 from quant_edge_lab.discovery.v6.design import frozen_cells, load_v6
 from quant_edge_lab.discovery.v6.evaluate import evaluate_hypotheses
-from quant_edge_lab.discovery.v6.events import process_day, signed_forward
+from quant_edge_lab.discovery.v6.events import (
+    process_day,
+    signed_forward,
+    window_peer_ids,
+    window_residuals,
+)
 from quant_edge_lab.discovery.v6.history import SessionResidualHistory
 from quant_edge_lab.discovery.v6.incremental import (
     incremental_confirmatory_ok,
@@ -401,3 +406,94 @@ def test_current_day_not_in_beta():
     assert "AAA" in b_prior
     assert b_prior["AAA"] != b_leak["AAA"]
     assert beta_from_history(prior[:19], ["AAA"]) == {}
+
+
+def test_newly_eligible_gets_beta_from_listed_not_event_universe():
+    def panel(i: int, names: list[str], *, new_ret: float | None = None) -> pl.DataFrame:
+        rets = []
+        for n in names:
+            if n == "NEW" and new_ret is not None:
+                rets.append(new_ret)
+            elif n == "NEW":
+                rets.append(0.02 * (i + 1))
+            else:
+                rets.append(0.01 * (i + 1))
+        return pl.DataFrame(
+            {
+                "instrument_id": names,
+                "daily_ret": rets,
+                "daily_mkt_loo": [0.008 * (i + 1)] * len(names),
+            }
+        )
+
+    listed = [panel(i, ["OLD", "NEW"]) for i in range(20)]
+    event_only = [p.filter(pl.col("instrument_id") == "OLD") for p in listed]
+    b_ok = beta_from_history(listed, ["NEW"])
+    b_wrong = beta_from_history(event_only, ["NEW"])
+    assert "NEW" in b_ok
+    assert "NEW" not in b_wrong
+    leaked = beta_from_history(listed + [panel(20, ["OLD", "NEW"], new_ret=50.0)], ["NEW"])
+    assert b_ok["NEW"] != leaked["NEW"]
+
+
+def test_separate_impulse_and_remaining_loo_universes():
+    p0, p1, p2 = time(9, 59), time(10, 4), time(10, 9)
+    closes = {
+        "AAA": {p0: 100.0, p1: 120.0, p2: 120.0},
+        "BBB": {p0: 100.0, p1: 100.0, p2: 100.0},
+        "NO_P2": {p0: 100.0, p1: 150.0},
+        "NO_P1": {p0: 100.0, p2: 70.0},
+    }
+    betas = {k: 1.0 for k in closes}
+    imp_ids = window_peer_ids(closes, p0, p1)
+    rem_ids = window_peer_ids(closes, p0, p2)
+    assert "NO_P2" in imp_ids and "NO_P1" not in imp_ids
+    assert "NO_P1" in rem_ids and "NO_P2" not in rem_ids
+    imp = window_residuals(closes, imp_ids, p0, p1, betas)
+    rem = window_residuals(closes, rem_ids, p0, p2, betas)
+    imp_no = window_residuals(closes, ["AAA", "BBB"], p0, p1, betas)
+    rem_no = window_residuals(closes, ["AAA", "BBB"], p0, p2, betas)
+    assert "NO_P2" in imp and "NO_P1" not in imp
+    assert "NO_P1" in rem and "NO_P2" not in rem
+    assert imp["AAA"] != imp_no["AAA"]
+    assert rem["AAA"] != rem_no["AAA"]
+
+
+def test_impulse_shock_independent_of_wait_window():
+    cell_w5 = dict(CELL)
+    cell_w15 = {
+        **CELL,
+        "id": "W5_W15",
+        "wait_window_minutes": 15,
+    }
+    names = {"AAA": 100.0, "BBB": 100.0, "CCC": 100.0, "NO_P2_LATE": 100.0}
+    bars = _rth_day("2022-01-03", names, drop={"NO_P2_LATE": time(10, 19)})
+    hist = _hist_filled(tuple(names))
+    betas = {k: 1.0 for k in names}
+    ev5, imap = process_day(bars, cell_w5, betas=betas, history=hist)
+    assert ("NO_P2_LATE", "5:10:00") in imap
+    ev15, _ = process_day(
+        bars, cell_w15, betas=betas, history=hist, impulse_map=imap
+    )
+    a5 = ev5.filter(pl.col("instrument_id") == "AAA")
+    a15 = ev15.filter(pl.col("instrument_id") == "AAA")
+    assert a5.height == 1 and a15.height == 1
+    assert a5["impulse_start"][0] == a15["impulse_start"][0] == "10:00"
+    assert a5["impulse_residual"][0] == a15["impulse_residual"][0]
+    assert a5["shock_z"][0] == a15["shock_z"][0]
+    assert "forward_5m" in ev5.columns and "forward_30m" in ev5.columns
+
+
+def test_target_missing_p0_p1_or_p2_is_not_an_event():
+    hist = _hist_filled(("AAA", "BBB", "CCC"))
+    betas = {"AAA": 1.0, "BBB": 1.0, "CCC": 1.0}
+    for drop_t in (time(9, 59), time(10, 4), time(10, 9)):
+        bars = _rth_day(
+            "2022-01-03",
+            {"AAA": 100.0, "BBB": 100.0, "CCC": 100.0},
+            drop={"AAA": drop_t},
+        )
+        ev, _ = process_day(bars, CELL, betas=betas, history=hist)
+        aaa = ev.filter(pl.col("instrument_id") == "AAA")
+        if aaa.height:
+            assert aaa["impulse_start"][0] != "10:00"
