@@ -114,3 +114,32 @@ def assert_no_future_splits(days: list[str], cal_man: dict[str, Any]) -> None:
         sp = split_for_day(day, cal_man)
         if sp in {"D2", "D3"}:
             raise RuntimeError(f"D1 execute refuses to load {day} ({sp})")
+
+
+def d2_state_and_eval_days(
+    calendar: list[str], cal_man: dict[str, Any]
+) -> tuple[list[str], list[str]]:
+    """Warmup+D1 for causal state; D2 for evaluation. D3 never included."""
+    from quant_edge_lab.discovery.v5.partitions import split_for_day
+
+    pre: list[str] = []
+    d2: list[str] = []
+    for day in clip_to_panel(calendar, cal_man):
+        sp = split_for_day(day, cal_man)
+        if sp == "D3":
+            break
+        if sp in {"WARMUP", "D1"}:
+            pre.append(day)
+        elif sp == "D2":
+            d2.append(day)
+    return pre, d2
+
+
+def assert_no_d3_days(days: list[str], cal_man: dict[str, Any]) -> None:
+    from quant_edge_lab.discovery.v5.partitions import split_for_day
+
+    d2_end = cal_man["splits"]["D2"]["end"]
+    for day in days:
+        sp = split_for_day(day, cal_man)
+        if sp == "D3" or day > d2_end:
+            raise RuntimeError(f"D2 execute refuses to load {day} ({sp})")

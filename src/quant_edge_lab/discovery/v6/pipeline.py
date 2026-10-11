@@ -1,4 +1,4 @@
-"""D1-only day walk: causal eligibility, V5 beta, four frozen cells. No D2/D3."""
+"""D1 grid walk and D2 frozen-cell walk. D3 is never loaded."""
 
 from __future__ import annotations
 
@@ -23,11 +23,18 @@ from quant_edge_lab.discovery.v5.session import (
     rth_only,
     with_session,
 )
-from quant_edge_lab.discovery.v6.calendar import assert_no_future_splits, d1_loadable_days
+from quant_edge_lab.discovery.v6.calendar import (
+    assert_no_d3_days,
+    assert_no_future_splits,
+    d1_loadable_days,
+    d2_state_and_eval_days,
+)
+from quant_edge_lab.discovery.v6.d1_pin import FROZEN_SELECTED_ID, frozen_cell_match
 from quant_edge_lab.discovery.v6.design import campaign_block, frozen_cells
 from quant_edge_lab.discovery.v6.evaluate import evaluate_hypotheses
-from quant_edge_lab.discovery.v6.events import process_day
+from quant_edge_lab.discovery.v6.events import _eligible_closes, compute_impulse_map, process_day
 from quant_edge_lab.discovery.v6.history import HistoryKey, SessionResidualHistory
+from quant_edge_lab.discovery.v6.promotion import d2_h1_decision
 from quant_edge_lab.discovery.v6.selection import select_d1_cell
 from quant_edge_lab.features.v4r.beta import BETA_WINDOW, beta_from_history
 
@@ -181,3 +188,194 @@ def d1_days_from_calendar(calendar: list[str], cal_man: dict[str, Any]) -> list[
     days = d1_loadable_days(calendar, cal_man)
     assert_no_future_splits(days, cal_man)
     return days
+
+
+def _advance_listed_state(
+    *,
+    sess: pl.DataFrame,
+    rth: pl.DataFrame,
+    iids: list[str],
+    listed: set[str] | None,
+    elig_hist: dict[str, dict[str, list[tuple[str, float]]]],
+    cfg: EligibilityConfig,
+    beta_panels: list[pl.DataFrame],
+) -> list[pl.DataFrame]:
+    panel = daily_panel_from_session(sess, eligible=listed)
+    if panel.height:
+        beta_panels.append(panel)
+        if len(beta_panels) > BETA_WINDOW:
+            beta_panels = beta_panels[-BETA_WINDOW:]
+    for iid in iids:
+        if listed is not None and iid not in listed:
+            continue
+        g = rth.filter(pl.col("instrument_id") == iid)
+        update_elig_hist(
+            elig_hist,
+            iid=iid,
+            day=str(rth["session_date"][0]),
+            close_1559=_close_1559(g),
+            rth_dvol=rth_dollar_volume(g),
+            lookback=cfg.lookback,
+        )
+    return beta_panels
+
+
+def rebuild_pre_d2_state(
+    days: list[str],
+    load_day: LoadDay,
+    *,
+    calendar: list[str],
+    cal_man: dict[str, Any],
+    des: dict[str, Any],
+    instruments: pl.DataFrame | None,
+    w_imp: int,
+    min_rth_minutes: int = 380,
+) -> tuple[
+    dict[str, dict[str, list[tuple[str, float]]]],
+    list[pl.DataFrame],
+    SessionResidualHistory,
+    set[str] | None,
+]:
+    """Causal eligibility, listed beta panels, W_imp impulse history. No events/outcomes."""
+    from quant_edge_lab.discovery.v5.partitions import split_for_day
+
+    assert_no_d3_days(days, cal_man)
+    camp = campaign_block(des)
+    cfg = eligibility_cfg(camp)
+    listed = listed_ids(instruments, cfg)
+    elig_hist: dict[str, dict[str, list[tuple[str, float]]]] = {}
+    beta_panels: list[pl.DataFrame] = []
+    history = SessionResidualHistory()
+    for day in days:
+        if day not in calendar:
+            raise RuntimeError(f"{day} is not on the pinned research calendar")
+        if split_for_day(day, cal_man) in {"D2", "D3"}:
+            raise RuntimeError(f"pre-D2 state rebuild refuses {day}")
+        bars = load_day(day)
+        if bars is None or bars.height == 0:
+            history.push({})
+            continue
+        sess = with_session(bars)
+        if classify_trading_day(sess, min_rth_minutes=min_rth_minutes) != "FULL_RTH":
+            history.push({})
+            continue
+        rth = rth_only(sess)
+        iids = [str(x) for x in rth["instrument_id"].unique().to_list()]
+        elig = eligible_today(iids, day, listed=listed, elig_hist=elig_hist, cfg=cfg)
+        beta_map = beta_from_history(beta_panels, sorted(elig)) if elig else {}
+        parsed = _eligible_closes(bars, elig, min_rth_minutes)
+        if parsed is None:
+            history.push({})
+        else:
+            _rth, _groups, closes, _opens = parsed
+            history.push(compute_impulse_map(closes, w_imp=w_imp, betas=beta_map))
+        beta_panels = _advance_listed_state(
+            sess=sess,
+            rth=rth,
+            iids=iids,
+            listed=listed,
+            elig_hist=elig_hist,
+            cfg=cfg,
+            beta_panels=beta_panels,
+        )
+    return elig_hist, beta_panels, history, listed
+
+
+def walk_d2(
+    calendar: list[str],
+    load_day: LoadDay,
+    *,
+    cal_man: dict[str, Any],
+    des: dict[str, Any],
+    instruments: pl.DataFrame | None,
+    cell: dict[str, Any],
+    min_rth_minutes: int = 380,
+) -> dict[str, Any]:
+    """Evaluate only the D1-frozen cell on D2. Reconstructs causal state without D1 selection."""
+    from quant_edge_lab.discovery.v5.partitions import split_for_day
+
+    if not frozen_cell_match(cell) or cell.get("id") != FROZEN_SELECTED_ID:
+        raise RuntimeError(f"D2 refuses cell {cell}")
+    pre_days, d2_days = d2_state_and_eval_days(calendar, cal_man)
+    assert_no_d3_days(pre_days + d2_days, cal_man)
+    d2_end = cal_man["splits"]["D2"]["end"]
+
+    def guarded(day: str) -> pl.DataFrame | None:
+        if day > d2_end or split_for_day(day, cal_man) == "D3":
+            raise RuntimeError(f"D2 execute refuses to read {day}")
+        return load_day(day)
+
+    camp = campaign_block(des)
+    cfg = eligibility_cfg(camp)
+    w_imp = int(cell["impulse_window_minutes"])
+    elig_hist, beta_panels, history, listed = rebuild_pre_d2_state(
+        pre_days,
+        guarded,
+        calendar=calendar,
+        cal_man=cal_man,
+        des=des,
+        instruments=instruments,
+        w_imp=w_imp,
+        min_rth_minutes=min_rth_minutes,
+    )
+    parts: list[pl.DataFrame] = []
+    evaluated_ids = [cell["id"]]
+    for day in d2_days:
+        if day not in calendar:
+            raise RuntimeError(f"{day} is not on the pinned research calendar")
+        bars = guarded(day)
+        if bars is None or bars.height == 0:
+            history.push({})
+            continue
+        sess = with_session(bars)
+        if classify_trading_day(sess, min_rth_minutes=min_rth_minutes) != "FULL_RTH":
+            history.push({})
+            continue
+        rth = rth_only(sess)
+        iids = [str(x) for x in rth["instrument_id"].unique().to_list()]
+        elig = eligible_today(iids, day, listed=listed, elig_hist=elig_hist, cfg=cfg)
+        beta_map = beta_from_history(beta_panels, sorted(elig)) if elig else {}
+        ev, day_map = process_day(
+            bars,
+            cell,
+            betas=beta_map,
+            history=history,
+            eligible=elig,
+            min_rth_minutes=min_rth_minutes,
+        )
+        history.push(day_map)
+        if ev.height:
+            parts.append(ev)
+        beta_panels = _advance_listed_state(
+            sess=sess,
+            rth=rth,
+            iids=iids,
+            listed=listed,
+            elig_hist=elig_hist,
+            cfg=cfg,
+            beta_panels=beta_panels,
+        )
+    inf = camp["inference"]
+    events = pl.concat(parts, how="diagonal_relaxed") if parts else pl.DataFrame()
+    evl = evaluate_hypotheses(
+        events,
+        n_boot=int(inf["bootstrap_daily_means"]),
+        seed=int(inf["seed"]),
+        bh_q=float(inf["bh_q"]),
+    )
+    decision = d2_h1_decision(
+        evl["h1_stats"],
+        evl["incremental"],
+        sample=camp["sample"],
+        bh_survivor=bool(evl["h1_bh_survivor"]),
+    )
+    return {
+        "split": "D2",
+        "stopped_after": "D2",
+        "mode": "D2_ONLY",
+        "evaluated_cell_ids": evaluated_ids,
+        "cell": cell,
+        "cells": {cell["id"]: evl},
+        "primary_estimand": "equal_weight_trading_day_mean",
+        **decision,
+    }

@@ -593,16 +593,21 @@ def discovery_campaign_v6(
     execute: bool = typer.Option(
         False,
         "--execute",
-        help="Forbidden until independent review. Default is readiness-only.",
+        help="D1-only. Forbidden until independent review. Default is readiness-only.",
+    ),
+    execute_d2: bool = typer.Option(
+        False,
+        "--execute-d2",
+        help="D2-only. Forbidden until independent review. Does not open D3.",
     ),
 ) -> None:
-    """V6 market-residual shock retention. Default prints readiness and does not run D1."""
+    """V6 market-residual shock retention. Default prints readiness and does not run research."""
     from quant_edge_lab.discovery.v6.runner import run_campaign_v6
 
     root = Path.cwd()
-    if execute:
+    if execute or execute_d2:
         try:
-            state = run_campaign_v6(root, execute=True)
+            state = run_campaign_v6(root, execute=execute, execute_d2=execute_d2)
         except RuntimeError as exc:
             console.print(str(exc))
             raise typer.Exit(code=1) from exc
@@ -637,8 +642,18 @@ def discovery_campaign_v6(
         f"calendar_match={state['calendar_identity_match']} n_days={state['calendar_n_days']}"
     )
     console.print(f"sealed_oos={state['sealed_oos']} execution_status={state['execution_status']}")
+    console.print(f"d1_sha256={state.get('d1_json_sha256')} pin_ok={state.get('d1_pin_ok')}")
+    console.print(
+        f"d2_cell={state.get('d2_frozen_cell')} "
+        f"{state.get('d2_start')}..{state.get('d2_end')}"
+    )
+    console.print(
+        f"d2_payloads_read={state.get('d2_payloads_read')} "
+        f"d3_opened={state.get('d3_opened')}"
+    )
     console.print(f"launch={state['launch_command']}")
-    console.print("SIGNAL_ONLY. STOP. Default does not run D1 or compute event counts.")
+    console.print(f"d2_launch={state.get('d2_launch_command')}")
+    console.print("SIGNAL_ONLY. STOP. Default does not run D1/D2 or read D2 minute payloads.")
     raise typer.Exit(code=0)
 
 

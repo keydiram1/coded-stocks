@@ -11,6 +11,56 @@ H1_ID = "H1_HIGH_RETENTION_CONTINUATION"
 LABEL_NOT_INCREMENTAL = "PRIMARY_SIGNAL_POSITIVE_BUT_RETENTION_NOT_INCREMENTAL"
 
 
+def d2_failure_reasons(
+    h1: dict[str, Any],
+    incremental: dict[str, Any],
+    *,
+    sample: dict[str, Any],
+    bh_survivor: bool,
+    economic_floor: float = 0.0003,
+) -> list[str]:
+    """All frozen D2 H1 gates. H2/H3 are not consulted."""
+    reasons: list[str] = []
+    if not sample_ok(h1, sample):
+        reasons.append("sample_or_concentration")
+    mean = h1.get("mean")
+    if mean is None or float(mean) <= 0:
+        reasons.append("direction_failed")
+    if mean is None or float(mean) < economic_floor:
+        reasons.append("below_d2_floor")
+    if bh_survivor is not True:
+        reasons.append("bh_not_survivor")
+    ok, why = incremental_confirmatory_ok(incremental)
+    if not ok and why:
+        reasons.append(why)
+    return reasons
+
+
+def d2_h1_decision(
+    h1: dict[str, Any],
+    incremental: dict[str, Any],
+    *,
+    sample: dict[str, Any],
+    bh_survivor: bool,
+    economic_floor: float = 0.0003,
+) -> dict[str, Any]:
+    reasons = d2_failure_reasons(
+        h1,
+        incremental,
+        sample=sample,
+        bh_survivor=bh_survivor,
+        economic_floor=economic_floor,
+    )
+    survived = not reasons
+    return {
+        "decision": "ACTIVE_FOR_D3" if survived else "KILL_AT_D2",
+        "failure_reasons": reasons,
+        "d2_opened": True,
+        "d3_opened": False,
+        "next_action": "STOP_FOR_INDEPENDENT_REVIEW",
+    }
+
+
 def h1_survives_d2(
     h1: dict[str, Any],
     incremental: dict[str, Any],

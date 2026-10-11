@@ -293,8 +293,15 @@ def test_readiness_does_not_execute_or_read_payloads(monkeypatch):
         raise AssertionError("run_d1_execute must not run during readiness")
 
     monkeypatch.setattr("quant_edge_lab.discovery.v6.runner.run_d1_execute", boom)
+
+    def boom_d2(*_a, **_k):
+        called.append("d2")
+        raise AssertionError("run_d2_execute must not run during readiness")
+
+    monkeypatch.setattr("quant_edge_lab.discovery.v6.runner.run_d2_execute", boom_d2)
     out = run_campaign_v6(Path("."), execute=False)
     assert out["mode"] == "READINESS"
+    assert out["d2_payloads_read"] is False
     assert called == []
     assert out["calendar_n_days"] == EXPECTED_CALENDAR_N_DAYS
     assert out["calendar_hash_expected"] == EXPECTED_CALENDAR_HASH
