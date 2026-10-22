@@ -29,7 +29,31 @@ def test_v7_is_design_only_and_does_not_reopen_closed_families():
     assert fam["response_grid_minutes"] == [5, 10, 15, 30, 60, 120]
     assert fam["clocks"]["primary_entry"] == "T_event_plus_2_open"
     assert fam["clocks"]["skip_open"] == "T_event_plus_1_open"
+    assert fam["clocks"]["max_impulse_start"] == {
+        "W5": "13:54",
+        "W15": "13:44",
+        "W30": "13:29",
+        "W60": "12:59",
+    }
+    assert fam["event_selection"]["per_ticker_day"] == "first_qualifying_shock_only"
+    assert fam["event_selection"]["future_outcomes_not_used_to_choose_or_replace_the_event"] is True
+    assert fam["forward_residual"]["not_raw_stock_return"] is True
+    assert "eligible" in fam["residual"]["market"]
     assert fam["primary_estimand"] == "equal_weight_trading_day_mean"
+    assert des["response_surface"]["common_cohort_only_for_shape_stability_selection"] is True
+    assert des["response_surface"]["descriptive_unbalanced_cannot_determine_shape"] is True
+    by_id = {r["id"]: r for r in des["shape_rule"]["rules_in_order"]}
+    assert by_id["fast_decay"]["anchor_minutes"] == 5
+    assert by_id["reversal"]["direction"] == "opposite_to_shock"
+    assert by_id["temporary_continuation_then_reversal"]["direction"] == "opposite_to_shock"
+    assert by_id["persistent_repricing"]["anchor_minutes"] == 30
+    assert des["d1"]["each_frozen_candidate_is_exactly_one_confirmatory_anchor_hypothesis"] is True
+    assert des["d2"]["bh"]["across"] == "exactly_the_K_frozen_anchor_hypotheses"
+    assert des["d2"]["bh"]["not_across_horizons_of_the_curve"] is True
+    assert "shape_conditional_persistence_on_common_cohort" in des["d2"][
+        "hierarchical_required_gates_not_in_bh"
+    ]
+    assert des["multiplicity"]["persistence_is_hierarchical_not_bh"] is True
     assert set(des["mechanism_families"]) == {
         "A_MARKET_RELATIVE_SHOCK_RESOLUTION",
         "B_SHOCK_ABSORPTION_RETENTION",
@@ -47,13 +71,9 @@ def test_v7_is_design_only_and_does_not_reopen_closed_families():
     assert des["d2"]["no_nearby_point_rescue"] is True
     assert des["d2"]["next_action_even_if_pass"] == "STOP_FOR_INDEPENDENT_REVIEW"
     assert des["d3"]["no_automatic_launch"] is True
-    assert des["stability"]["require_all"] == [
-        "shape_not_no_stable_effect",
-        "sample_and_concentration_on_anchor",
-        "neighborhood_same_sign",
-        "not_singleton_spike",
-        "d1_subperiod_sign_agreement",
-    ]
+    assert des["stability"]["cohort"] == "common_cohort_only"
+    assert des["stability"]["neighborhood_is_shape_conditional"] is True
+    assert "shape_conditional_hierarchical_persistence" in des["stability"]["require_all"]
     assert des["multiplicity"]["first_wave_discovery_curves"] == 4
     assert des["multiplicity"]["horizons_are_descriptors_not_extra_trials"] is True
     assert fam["execute_now"] is False
