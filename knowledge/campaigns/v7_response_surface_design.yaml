@@ -39,11 +39,11 @@ primary_research_question: >
 
 shape_classes:
   - persistent_repricing
-  - continuation
+  - delayed_continuation
   - reversal
   - temporary_continuation_then_reversal
-  - delayed_continuation
   - fast_decay
+  - continuation
   - no_stable_effect
 
 MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
@@ -106,28 +106,41 @@ MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
       Horizon H is entry open to close(entry + H - 1m).
       to_close is entry open to 15:59 close.
     common_cohort_completeness: >
-      Shape, stability, D1 selection, and D2/D3 confirmation use one
-      common event cohort. Require: (1) entry <= 14:00; (2) every target
-      minute from P0 through 15:59 inclusive exists. Then all of
-      5/10/15/30/60/120/to_close are observable on the same names/days.
-      A missing internal minute through 15:59 invalidates the candidate
-      for the common cohort.
+      Applied AFTER reservation, when the session is complete. Not used
+      to choose the event. Require: (1) entry <= 14:00; (2) every target
+      minute from P0 through 15:59 inclusive. Then all of
+      5/10/15/30/60/120/to_close are observable on the same reserved
+      names/days. Failure drops the reserved event from common-cohort
+      analysis only.
     descriptive_unbalanced_horizons: >
       Per-horizon samples that drop events missing only later bars MAY
       be reported as descriptive_unbalanced. They MUST NOT determine
       shape class, stability, D1 freeze, or confirmatory tests.
     peer_completeness: window_specific_eligible_LOO_as_V6
   event_selection:
-    per_ticker_day: first_qualifying_shock_only
+    per_ticker_day: first_causal_qualifying_shock_only
     scan: impulse_starts_from_10_00_through_W_specific_max_inclusive_1m_steps
-    qualify_iff:
+    causal_qualify_iff:
       - contiguous_P0_through_P1
-      - common_cohort_P0_through_1559
+      - causal_eligibility
+      - causal_beta_exists
+      - exact_prior_20_same_clock_shock_scale_exists
       - abs_shock_z_ge_2
-      - causal_eligibility_and_beta
-    reserve_at: signal_time_T_event_close_known
-    future_outcomes_not_used_to_choose_or_replace_the_event: true
+    causal_event_qualification_excludes_forward_bars: true
+    common_cohort_not_in_causal_qualify_iff: true
+    reserve_first_at_T_event: true
+    reserve_using_only_information_available_by_T_event: true
+    post_reservation_common_cohort_filter:
+      applied_after_session_complete: true
+      requires:
+        - entry_le_14_00
+        - every_target_minute_P0_through_1559
+      if_fail: exclude_from_common_cohort_shape_analysis
+      do_not_search_later_shock: true
+      do_not_re_reserve: true
+    later_signal_cannot_replace_failed_reserved_event: true
     later_valid_signal_cannot_replace_earlier_reserved_signal: true
+    causal_event_qualification_ne_post_event_common_cohort_eligibility: true
   event_grid:
     impulse_window_minutes: [5, 15, 30, 60]
     min_abs_shock_z: [2.0]
@@ -136,7 +149,11 @@ MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
     not_every_integer_minute: true
   response_grid_minutes: [5, 10, 15, 30, 60, 120]
   response_to_close: same_session_1559
-  shock_signed_forward: sign(impulse_residual) * forward_residual
+  aligned_forward_residual:
+    formula: sign(impulse_residual) * forward_residual
+    positive: continuation_in_impulse_direction
+    negative: reversal_against_impulse_direction
+    used_everywhere_in_v7_shape_and_confirmation: true
   primary_estimand: equal_weight_trading_day_mean
   inference:
     unit: trading_day
@@ -201,7 +218,7 @@ mechanism_families:
 response_surface:
   unit: one_curve_per_event_definition
   columns: [h5, h10, h15, h30, h60, h120, to_close]
-  shape_input: equal_weight_trading_day_mean_of_shock_signed_forward_residual
+  shape_input: equal_weight_trading_day_mean_of_aligned_forward_residual
   common_cohort_only_for_shape_stability_selection: true
   also_report: [se, ci, p_one_sided, n_days, n_tickers, top_ticker_share, win_rate]
   descriptive_unbalanced_allowed: true
@@ -210,64 +227,69 @@ response_surface:
   first_wave_curves: 4
 
 near_zero_bp: 1.0
+strong: aligned_abs_mean_bp_ge_1
 
 shape_rule:
-  applied_to: common_cohort_shock_signed_equal_day_means
+  coordinate: aligned_forward_residual
+  applied_to: common_cohort_aligned_equal_day_means
   assignment: first_matching_rule_in_the_order_below
   d1_does_not_pick_argmax_bp: true
-  strong: abs_mean_bp_ge_1
+  uses_aligned_coordinates_only: true
   rules_in_order:
     - id: persistent_repricing
-      when: >
-        15, 30, 60, 120, and to_close are all strong and have the same
-        sign as the shock.
-      direction: same_as_shock
+      aligned_pattern: 15_30_60_120_to_close_all_strong_positive
+      near_zero_pattern: none_required
       anchor_minutes: 30
-      hierarchical_persistence: 15_30_60_120_to_close_all_strong_same_as_shock
-    - id: continuation
-      when: >
-        not persistent_repricing; at least two of {15,30,60} strong and
-        same sign as shock; 120m not strong opposite to shock.
-      direction: same_as_shock
-      anchor_minutes: >
-        30 if 30 is strong same-as-shock; else 15 if 15 and 60 are the
-        two strong points; else 15 if {15,30}; else 30 if {30,60}.
-      hierarchical_persistence: qualifying_15_30_60_points_remain_same_sign_as_shock
-    - id: reversal
-      when: 15m strong opposite to shock AND 30m strong opposite to shock
-      direction: opposite_to_shock
-      anchor_minutes: 30
-      hierarchical_persistence: 15_and_30_remain_strong_opposite_to_shock
-    - id: temporary_continuation_then_reversal
-      when: >
-        (5m or 10m) strong same as shock AND (60m or 120m) strong opposite
-        to shock; not already classified above.
-      direction: opposite_to_shock
-      anchor_minutes: 60 if 60 strong opposite else 120
-      hierarchical_persistence: >
-        Early continuation is definitional only. Confirmatory neighborhood
-        is the late reversal: if both 60 and 120 are strong they must share
-        the opposite-to-shock sign; a near-zero late point is not a conflict.
+      confirmatory_signed_anchor: aligned_anchor_return
+      hierarchical_persistence: those_points_remain_strong_positive
     - id: delayed_continuation
-      when: >
-        5m and 10m |mean_bp| < 1; 30m and 60m strong same sign as shock.
-      direction: same_as_shock
+      aligned_pattern: 30_and_60_strong_positive
+      near_zero_pattern: 5_and_10_abs_lt_1
       anchor_minutes: 30
+      confirmatory_signed_anchor: aligned_anchor_return
+      hierarchical_persistence: 30_60_remain_strong_positive_and_5_10_remain_near_zero
+    - id: reversal
+      aligned_pattern: 15_and_30_strong_negative
+      near_zero_pattern: none_required
+      anchor_minutes: 30
+      confirmatory_signed_anchor: neg_aligned_anchor_return
+      hierarchical_persistence: 15_and_30_remain_strong_negative
+    - id: temporary_continuation_then_reversal
+      aligned_pattern: early_5_or_10_strong_positive_AND_late_60_or_120_strong_negative
+      near_zero_pattern: none_required
+      anchor_minutes: 60 if 60 strong negative else 120
+      confirmatory_signed_anchor: neg_aligned_anchor_return
       hierarchical_persistence: >
-        30 and 60 remain strong same as shock. 5 and 10 remain |mean_bp| < 1.
-        Do not require 15m to be strong (it may be near zero).
+        If both 60 and 120 are strong they remain negative. A near-zero
+        late point is not a conflict. Early positive is definitional only.
     - id: fast_decay
-      when: 5m strong same as shock; 30m and 60m |mean_bp| < 1
-      direction: same_as_shock
+      aligned_pattern: 5_strong_positive_then_30_and_60_near_zero
+      near_zero_pattern: 30_and_60_abs_lt_1
       anchor_minutes: 5
+      confirmatory_signed_anchor: aligned_anchor_return
       freeze_eligible: true
-      hierarchical_persistence: >
-        5m remains strong same as shock. 30m and 60m remain |mean_bp| < 1.
-        15m is not strong opposite. Neighborhood is decay persistence, not
-        two strong points in {15,30,60}.
+      hierarchical_persistence: 5_remains_strong_positive_30_60_remain_near_zero_15_not_strong_negative
+    - id: continuation
+      aligned_pattern: at_least_two_of_15_30_60_strong_positive_and_120_not_strong_negative
+      near_zero_pattern: none_required
+      # Delayed/persistent already matched above, so this is generic leftover continuation.
+      anchor_minutes: >
+        30 if 30 strong positive; else 15 if 15 and 60 are the two strong
+        positives; else 15 if {15,30}; else 30 if {30,60}.
+      confirmatory_signed_anchor: aligned_anchor_return
+      hierarchical_persistence: qualifying_15_30_60_remain_positive
     - id: no_stable_effect
-      when: none_of_the_above
+      aligned_pattern: none_of_the_above
       freeze_eligible: false
+
+shape_table:
+  - {id: persistent_repricing, required_sign: late_grid_strong_positive, required_near_zero: none, anchor: 30, confirmatory: aligned_anchor_return}
+  - {id: delayed_continuation, required_sign: 30_and_60_strong_positive, required_near_zero: 5_and_10, anchor: 30, confirmatory: aligned_anchor_return}
+  - {id: reversal, required_sign: 15_and_30_strong_negative, required_near_zero: none, anchor: 30, confirmatory: neg_aligned_anchor_return}
+  - {id: temporary_continuation_then_reversal, required_sign: early_positive_late_negative, required_near_zero: none, anchor: 60_else_120, confirmatory: neg_aligned_anchor_return}
+  - {id: fast_decay, required_sign: 5_strong_positive, required_near_zero: 30_and_60, anchor: 5, confirmatory: aligned_anchor_return}
+  - {id: continuation, required_sign: two_of_15_30_60_strong_positive, required_near_zero: none, anchor: 30_else_15, confirmatory: aligned_anchor_return}
+  - {id: no_stable_effect, required_sign: none, required_near_zero: none, anchor: none, confirmatory: not_freeze_eligible}
 
 stability:
   purpose: prefer_neighborhood_consistency_over_single_maximum
@@ -286,9 +308,8 @@ stability:
     [5,10,15,30,60,120,to_close] are strong opposite to that max's sign.
   d1_subperiod_sign_agreement_on_anchor: >
     Split D1 research days at the median D1 calendar date. Common-cohort
-    equal-day mean at the frozen anchor, in the frozen direction, must
-    have mean > 0 in both halves. A half below sample floors fails
-    stability; it is not skipped.
+    equal-day mean of confirmatory_signed_anchor must be > 0 in both
+    halves. A half below sample floors fails stability; it is not skipped.
   example_strong: {30m_bp: 4, 60m_bp: 6, 120m_bp: 5}
   example_weak: {15m_bp: 0, 30m_bp: -1, 47m_bp: 12, 60m_bp: 0}
   forty_seven_minutes_not_on_grid: true
@@ -302,7 +323,7 @@ d1:
   selection: stable_shapes_not_max_mean
   if_none: KILL_AT_D1
   if_more_than_2_stable_tiebreak_in_order:
-    - shape_rank_persistent_then_continuation_then_delayed_then_reversal_then_temp_rev_then_fast_decay
+    - shape_rank_as_rules_in_order
     - larger_abs_equal_day_mean_bp_on_that_curve_frozen_anchor
     - smaller_W_imp
     - lexicographic_W_imp_then_shape_id
@@ -311,7 +332,7 @@ d1:
     - impulse_window_minutes
     - min_abs_shock_z
     - shape_class
-    - direction
+    - confirmatory_signed_anchor
     - anchor_horizon_minutes
     - hierarchical_persistence_rule
     - primary_estimand
@@ -334,9 +355,12 @@ d2:
     not_across_horizons_of_the_curve: true
   hierarchical_required_gates_not_in_bh:
     - sample_and_concentration_on_anchor
-    - equal_day_mean_gt_0_in_frozen_direction_on_anchor
-    - economic_floor_3bp_on_anchor
+    - mean_confirmatory_signed_anchor_gt_0
+    - economic_floor_3bp_on_confirmatory_signed_anchor
     - shape_conditional_persistence_on_common_cohort
+  confirmatory_h1: mean_confirmatory_signed_anchor_gt_0
+  continuation_like_confirmatory_signed_anchor: aligned_anchor_return
+  reversal_like_confirmatory_signed_anchor: neg_aligned_anchor_return
   if_any_fail: KILL_AT_D2
   d3_opened: false
   next_action_even_if_pass: STOP_FOR_INDEPENDENT_REVIEW
@@ -362,14 +386,15 @@ leakage:
   - completed_bars_only
   - T_event_plus_2_open_entry
   - no_T_event_plus_1_open
-  - first_qualifying_shock_reserved_before_forwards
+  - first_causal_shock_reserved_before_forwards
+  - common_cohort_filter_is_post_reservation_only
+  - failed_common_cohort_does_not_re_reserve
   - exact_20_session_scale_no_reachback
   - listed_universe_beta_panels
   - eligible_peers_for_LOO
   - D1_reader_cannot_load_D2_or_D3
   - D2_reader_cannot_load_D3
   - sealed_OOS_inaccessible
-  - common_cohort_P0_through_1559
   - descriptive_unbalanced_cannot_select
 
 reuse_from_v4_v5_v6:
