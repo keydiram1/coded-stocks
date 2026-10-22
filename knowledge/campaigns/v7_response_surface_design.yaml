@@ -40,8 +40,8 @@ primary_research_question: >
 shape_classes:
   - persistent_repricing
   - delayed_continuation
-  - reversal
   - temporary_continuation_then_reversal
+  - reversal
   - fast_decay
   - continuation
   - no_stable_effect
@@ -86,7 +86,7 @@ MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
     P0: completed close of the minute immediately before impulse start
     P1: completed close of the last impulse minute
     T_event: P1_bar
-    signal_available_at: T_event_close_plus_0s
+    signal_available_at: immediately_after_P1_close
     skip_open: T_event_plus_1_open
     primary_entry: T_event_plus_2_open
     impulse_start_min: '10:00'
@@ -101,7 +101,9 @@ MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
     timeline: >
       Impulse uses W_imp consecutive completed RTH minutes.
       P0 = close(t0 - 1m). P1 = close(t0 + W_imp - 1m).
-      T_event is the P1 bar. Known at T_event+1m. Skip T_event+1 open.
+      T_event is the P1 bar. P1 close is known only after that minute
+      completes (immediately_after_P1_close). Reservation is at that
+      instant, not during an unfinished P1 bar. Skip T_event+1 open.
       Research entry is T_event+2 open. Max starts force entry <= 14:00.
       Horizon H is entry open to close(entry + H - 1m).
       to_close is entry open to 15:59 close.
@@ -128,8 +130,14 @@ MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
       - abs_shock_z_ge_2
     causal_event_qualification_excludes_forward_bars: true
     common_cohort_not_in_causal_qualify_iff: true
-    reserve_first_at_T_event: true
-    reserve_using_only_information_available_by_T_event: true
+    T_event: P1_bar
+    signal_available_time: immediately_after_P1_close
+    reservation_time: signal_available_time
+    reserve_only_after_completed_P1: true
+    unfinished_P1_cannot_qualify: true
+    reserve_requires_known_impulse_residual_and_shock_z: true
+    reserve_first_causal_qualifying_shock: true
+    reserve_using_only_information_available_after_P1_close: true
     post_reservation_common_cohort_filter:
       applied_after_session_complete: true
       requires:
@@ -248,20 +256,24 @@ shape_rule:
       anchor_minutes: 30
       confirmatory_signed_anchor: aligned_anchor_return
       hierarchical_persistence: 30_60_remain_strong_positive_and_5_10_remain_near_zero
-    - id: reversal
-      aligned_pattern: 15_and_30_strong_negative
-      near_zero_pattern: none_required
-      anchor_minutes: 30
-      confirmatory_signed_anchor: neg_aligned_anchor_return
-      hierarchical_persistence: 15_and_30_remain_strong_negative
     - id: temporary_continuation_then_reversal
       aligned_pattern: early_5_or_10_strong_positive_AND_late_60_or_120_strong_negative
       near_zero_pattern: none_required
       anchor_minutes: 60 if 60 strong negative else 120
       confirmatory_signed_anchor: neg_aligned_anchor_return
       hierarchical_persistence: >
-        If both 60 and 120 are strong they remain negative. A near-zero
-        late point is not a conflict. Early positive is definitional only.
+        Complete shape must recur. Require BOTH: (1) early continuation
+        persists — at least one of {5,10} remains strong positive; AND
+        (2) late reversal persists — frozen late anchor remains strong
+        negative. If both 60 and 120 are strong, both must remain
+        negative. Late reversal alone is not enough.
+    - id: reversal
+      aligned_pattern: 15_and_30_strong_negative
+      near_zero_pattern: none_required
+      # Temporary early-positive/late-negative already matched above.
+      anchor_minutes: 30
+      confirmatory_signed_anchor: neg_aligned_anchor_return
+      hierarchical_persistence: 15_and_30_remain_strong_negative
     - id: fast_decay
       aligned_pattern: 5_strong_positive_then_30_and_60_near_zero
       near_zero_pattern: 30_and_60_abs_lt_1
@@ -285,8 +297,8 @@ shape_rule:
 shape_table:
   - {id: persistent_repricing, required_sign: late_grid_strong_positive, required_near_zero: none, anchor: 30, confirmatory: aligned_anchor_return}
   - {id: delayed_continuation, required_sign: 30_and_60_strong_positive, required_near_zero: 5_and_10, anchor: 30, confirmatory: aligned_anchor_return}
-  - {id: reversal, required_sign: 15_and_30_strong_negative, required_near_zero: none, anchor: 30, confirmatory: neg_aligned_anchor_return}
   - {id: temporary_continuation_then_reversal, required_sign: early_positive_late_negative, required_near_zero: none, anchor: 60_else_120, confirmatory: neg_aligned_anchor_return}
+  - {id: reversal, required_sign: 15_and_30_strong_negative, required_near_zero: none, anchor: 30, confirmatory: neg_aligned_anchor_return}
   - {id: fast_decay, required_sign: 5_strong_positive, required_near_zero: 30_and_60, anchor: 5, confirmatory: aligned_anchor_return}
   - {id: continuation, required_sign: two_of_15_30_60_strong_positive, required_near_zero: none, anchor: 30_else_15, confirmatory: aligned_anchor_return}
   - {id: no_stable_effect, required_sign: none, required_near_zero: none, anchor: none, confirmatory: not_freeze_eligible}
@@ -366,11 +378,49 @@ d2:
   next_action_even_if_pass: STOP_FOR_INDEPENDENT_REVIEW
 
 d3:
+  preregistered_before_d1: true
   open_only_if: explicit_separate_authorization_and_D2_survival
   no_automatic_launch: true
+  no_retune: true
+  no_horizon_substitution: true
+  no_nearby_point_rescue: true
+  no_candidate_replacement: true
+  same_as_d2_freeze:
+    - family
+    - W_imp
+    - min_abs_shock_z
+    - common_cohort_rule
+    - response_grid
+    - shape_class
+    - anchor_horizon
+    - confirmatory_signed_anchor
+    - primary_estimand
+    - sample_and_concentration
+    - hierarchical_shape_persistence
+  confirmatory_h1: mean_confirmatory_signed_anchor_gt_0
   economic_floor_bp: 12
   bh_q: 0.10
-  bh_across: same_K_frozen_anchor_hypotheses
+  bh_across: exactly_the_same_frozen_K_hypotheses_as_d2
+  required_gates:
+    - sample_gates_pass
+    - concentration_gate_passes
+    - confirmatory_anchor_mean_gt_0
+    - confirmatory_anchor_mean_ge_12bp
+    - BH_survivor_q_0_10_across_same_frozen_K
+    - frozen_shape_specific_hierarchical_persistence_on_common_cohort
+    - anchor_direction_consistent_with_D2
+    - no_horizon_substitution
+    - no_nearby_point_rescue
+    - no_candidate_replacement
+  outcomes:
+    RESEARCH_PASS: all_required_gates_pass
+    VALIDATED_SUBTHRESHOLD_PHENOMENON: >
+      confirmatory mean > 0 AND BH survivor AND sample/concentration
+      pass AND shape persistence passes AND sign matches D2 AND
+      0 < mean_bp < 12
+    KILL_AT_D3: otherwise
+  sealed_oos: inaccessible
+  sealed_oos_not_opened_by_v7: true
 
 multiplicity:
   first_wave_discovery_curves: 4
@@ -386,7 +436,8 @@ leakage:
   - completed_bars_only
   - T_event_plus_2_open_entry
   - no_T_event_plus_1_open
-  - first_causal_shock_reserved_before_forwards
+  - first_causal_shock_reserved_after_completed_P1_close
+  - unfinished_P1_cannot_qualify
   - common_cohort_filter_is_post_reservation_only
   - failed_common_cohort_does_not_re_reserve
   - exact_20_session_scale_no_reachback
