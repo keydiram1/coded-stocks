@@ -1,0 +1,31 @@
+# V7 mechanism selection. DESIGN_ONLY. Not an experiment result.
+# Do not execute. Do not buy options quotes. Do not reopen V6 or close-dislocation.
+status: DESIGN_ONLY
+execution_status: NOT_APPROVED
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+close_dislocation_family: CLOSED_NO_EDGE
+v6_shock_retention_family: CLOSED_NO_EDGE
+options_local_rv: DESIGN_ONLY_NOT_READY
+recommended_next_campaign: MARKET_RELATIVE_SHOCK_RESOLUTION_V1
+classification: READY_TO_IMPLEMENT_AFTER_DESIGN_REVIEW
+primary_entry: T_event_plus_2_open
+skip_open: T_event_plus_1_open
+d3_is_globally_untouched: false
+
+prior_collision:
+  V6_market_residual_shock_retention: CLOSED_NO_EDGE_KILL_AT_D2
+  V5_close_dislocation_family: CLOSED_NO_EDGE
+  V5_options_local_rv: BLOCKED_no_historical_quotes
+  V4_v4r_residual_leader_follower: FAILED_0_RESEARCH_PASS
+  V3_news_xs: FAILED
+  V2_ohlcv_families: FAILED_survivors_empty
+
+why_not_another_v6:
+  - single_15m_horizon_was_the_estimand_not_the_shape
+  - retention_wait_was_a_second_threshold_on_a_noisy_ratio
+  - D1_max_cell_selection_is_replaced_by_stable_regions
+  - do_not_retune_W_imp_W_wait_z_or_retention
+
+data_required: existing_stock_minute_OHLCV
+new_paid_data: forbidden_at_this_stage

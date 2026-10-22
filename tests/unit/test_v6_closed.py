@@ -2,7 +2,11 @@ from pathlib import Path
 
 import yaml
 
-from quant_edge_lab.discovery.v6.d1_pin import FROZEN_CELL, FROZEN_D1_IDENTITY, FROZEN_D1_JSON_SHA256
+from quant_edge_lab.discovery.v6.d1_pin import (
+    FROZEN_CELL,
+    FROZEN_D1_IDENTITY,
+    FROZEN_D1_JSON_SHA256,
+)
 from quant_edge_lab.hashing import sha256_file
 
 

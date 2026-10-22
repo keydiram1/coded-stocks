@@ -1,0 +1,321 @@
+# DESIGN_ONLY. Not frozen. Not approved. Do not execute. Do not run D1.
+campaign_id: v7_shock_resolution_through_time
+version: v7
+science_id: v7_shock_response_surface_v1
+status: DESIGN_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+parent_campaigns: [MARKET_RESIDUAL_SHOCK_RETENTION_V1]
+v6_family: CLOSED_NO_EDGE
+close_dislocation_family: CLOSED_NO_EDGE
+v5_options_local_rv: DESIGN_ONLY_NOT_READY
+note: >
+  DESIGN_ONLY for a response-surface campaign. Do not run D1/D2/D3.
+  Do not reopen V6. Do not buy options. Minute OHLCV can discover a
+  predictive phenomenon; it cannot claim executable profit.
+
+architecture:
+  pipeline:
+    - MECHANISM
+    - EVENT
+    - RESPONSE_CURVE
+    - STABILITY
+    - CANDIDATE_RULE
+    - FREEZE
+    - VALIDATION
+  d1_purpose: understand_shape_of_signed_residual_response_not_max_cell
+  not_a_magical_timestamp: true
+  feature_is_not_phenomenon: true
+  phenomenon_is_not_candidate_rule: true
+  candidate_rule_is_not_validated: true
+  validated_is_not_trading_edge: true
+  trading_edge_is_not_executable_profit: true
+
+primary_research_question: >
+  After a substantial market-relative stock shock, how does the stock's
+  subsequent signed residual return evolve through time?
+
+shape_classes:
+  - continuation
+  - reversal
+  - temporary_continuation_then_reversal
+  - delayed_continuation
+  - fast_decay
+  - persistent_repricing
+  - no_stable_effect
+
+MARKET_RELATIVE_SHOCK_RESOLUTION_V1:
+  role: primary_proposed_family_A
+  execute_now: false
+  mechanism_id: market_relative_shock_resolution_through_time
+  residual:
+    stock_simple: P_end / P_start - 1
+    market: equal_weight_LOO_listed_peers_same_window
+    beta: causal_20_prior_sessions_inherited_V5
+    formula: r_stock - beta * r_market_loo
+    missing_peer_bars: drop_peer_from_that_window_LOO_no_imputation
+  shock_z:
+    formula: impulse_residual / prior_same_clock_residual_std
+    prior_sessions: exact_20_research_sessions_immediately_before_event_day
+    same_clock: same_ET_impulse_start_and_same_W_imp
+    ddof: 1
+    require_all_20_finite: true
+    reachback: false
+    imputation: false
+    current_day_in_scale: false
+  clocks:
+    bar_label: minute_bar_start_ET
+    completed_price: official_minute_close
+    P0: completed close of the minute immediately before impulse start
+    P1: completed close of the last impulse minute
+    T_event: P1_bar
+    signal_available_at: T_event_close_plus_0s
+    skip_open: T_event_plus_1_open
+    primary_entry: T_event_plus_2_open
+    impulse_start_min: '10:00'
+    no_current_unfinished_minute: true
+    timeline: >
+      Impulse uses W_imp consecutive completed RTH minutes.
+      P0 = close(t0 - 1m). P1 = close(t0 + W_imp - 1m).
+      T_event is the P1 bar. T_event close is known at T_event+1m.
+      Do not enter at T_event+1 open. Research entry is T_event+2 open.
+      Horizon H outcome is that open to the close of H completed minutes
+      (close time = entry + H - 1m). to_close is 15:59 close vs entry open
+      and is eligible only if entry <= 14:00.
+    target_completeness: >
+      Event requires every target minute from P0 through P1 inclusive.
+      Each response point additionally requires every target minute from
+      entry through that horizon's last completed minute. A missing later
+      bar nulls that horizon only. It does not drop earlier points.
+    peer_completeness: window_specific_LOO_endpoints_as_V6
+  event_grid:
+    impulse_window_minutes: [5, 15, 30, 60]
+    min_abs_shock_z: [2.0]
+    cartesian_event_definitions: 4
+    no_wait_window_in_family_A: true
+    not_every_integer_minute: true
+  response_grid_minutes: [5, 10, 15, 30, 60, 120]
+  response_to_close: same_session_1559_if_entry_le_14_00
+  response_sign: sign_matched_to_impulse_residual
+  primary_estimand: equal_weight_trading_day_mean
+  inference:
+    unit: trading_day
+    bootstrap_daily_means: 1000
+    seed: 42
+    bh_q: 0.10
+    bh_on_d1_horizons: false
+  sample:
+    min_ticker_days: 750
+    min_trading_days: 100
+    min_tickers: 75
+    max_top_ticker_share: 0.50
+    min_win_rate: 0.48
+    applied_on: anchor_horizon_finite_primary_signed
+  eligibility:
+    inherit_v5_listed_common_stock: true
+    price_prev_close_min: 1.0
+    trailing_20d_median_rth_dollar_volume_min: 1000000.0
+  splits:
+    method: chronological_unsealed
+    warmup_last_day: '2021-10-28'
+    discovery_D1: {start: '2021-10-29', end: '2023-10-17', n_days: 494}
+    validation_D2: {start: '2023-10-18', end: '2024-10-10', n_days: 247}
+    confirmation_D3: {start: '2024-10-11', end: '2026-10-01', n_days: 494}
+    sealed_oos: closed_do_not_open
+    d1_subperiods: chronological_halves_of_D1_calendar_days
+
+mechanism_families:
+  A_MARKET_RELATIVE_SHOCK_RESOLUTION:
+    status: DESIGN_ONLY_PRIMARY_CANDIDATE
+    question: >
+      Does an abnormal residual move continue, reverse, decay, delay, or
+      persist across the preregistered response grid?
+    event: family_A_impulse_only
+    incremental_to_v6: replace_single_15m_and_retention_wait_with_full_curve
+  B_SHOCK_ABSORPTION_RETENTION:
+    status: DESIGN_ONLY_NOT_IN_FIRST_D1_EXECUTE
+    question: >
+      After the shock, does a short completed absorption window (remaining
+      residual / impulse residual, unclipped) contain incremental information
+      about later curve shape versus impulse-only?
+    cannot_rescue_family_A: true
+    wait_windows_if_later_approved: [5, 15]
+    note: V6 already killed high-retention continuation at 15m/15m. Family B
+      is a curve-level incremental test, not a V6 retune.
+  C_ABNORMAL_VOLUME_PRICE_RESPONSE:
+    status: DESIGN_ONLY_NOT_IN_FIRST_D1_EXECUTE
+    question: >
+      When RTH dollar volume in the impulse window is abnormal versus the
+      exact prior 20 same-clock sessions, does volume_z jointly with shock_z
+      predict signed residual response shape?
+    volume_scale: exact_20_prior_same_clock_impulse_dollar_volume_std
+    new_paid_data: false
+  D_CROSS_SECTIONAL_RELATIVE_DISLOCATION:
+    status: DESIGN_ONLY_NOT_IN_FIRST_D1_EXECUTE
+    question: >
+      When one stock's impulse residual is extreme in the contemporaneous
+      eligible cross-section (LOO rank or residual z vs peers that day),
+      does that relative dislocation resolve predictably?
+    not_v5_close_clock: true
+
+response_surface:
+  unit: one_curve_per_event_definition
+  columns: [h5, h10, h15, h30, h60, h120, to_close]
+  cell_value: equal_weight_trading_day_mean_signed_residual_return
+  also_report: [se, ci, p_one_sided, n_days, n_tickers, top_ticker_share, win_rate]
+  discovery_trials_are_curves_not_horizons: true
+  first_wave_curves: 4
+
+shape_rule:
+  applied_to: signed_equal_day_means_on_response_grid
+  near_zero_bp: 1.0
+  anchor_candidates_minutes: [15, 30, 60]
+  rules:
+    persistent_repricing: >
+      sign-matched means at 15, 30, 60, 120 and to_close all have
+      |mean_bp| >= 1 and the same sign as the shock.
+    continuation: >
+      not persistent_repricing; at least two of {15,30,60} same sign as
+      shock with |mean_bp| >= 1; 120m not opposite with |mean_bp| >= 1.
+    reversal: >
+      15m opposite to shock with |mean_bp| >= 1 and 30m same opposite sign.
+    temporary_continuation_then_reversal: >
+      5m or 10m same sign as shock; 60m or 120m opposite with |mean_bp| >= 1.
+    delayed_continuation: >
+      5m and 10m |mean_bp| < 1; 30m and 60m same sign as shock with
+      |mean_bp| >= 1.
+    fast_decay: >
+      5m same sign |mean_bp| >= 1; 30m and 60m |mean_bp| < 1.
+    no_stable_effect: none_of_the_above
+  assignment: first_matching_rule_in_the_order_above
+  d1_does_not_pick_argmax_bp: true
+
+stability:
+  purpose: prefer_neighborhood_consistency_over_single_maximum
+  applied_before_d1_freeze: true
+  require_all:
+    - shape_not_no_stable_effect
+    - sample_and_concentration_on_anchor
+    - neighborhood_same_sign
+    - not_singleton_spike
+    - d1_subperiod_sign_agreement
+  neighborhood_same_sign: >
+    Anchor is the middle of {15,30,60} among those with |mean_bp| >= 1
+    and correct shape sign; else 30m. Neighbors are the adjacent grid
+    points in [15,30,60]. At least two of {left, anchor, right} that
+    exist must share the shape sign with |mean_bp| >= 1. A neighbor
+    with |mean_bp| < 1 does not count as a conflict.
+  not_singleton_spike: >
+    Reject if the maximum |mean_bp| horizon on the full grid is isolated:
+    both adjacent points (if they exist) have opposite sign with
+    |mean_bp| >= 1, or are missing, while the max itself is not the
+    neighborhood-stable anchor.
+  d1_subperiod_sign_agreement: >
+    Split D1 research days at the median D1 calendar date. Anchor-horizon
+    equal-day mean must have the same sign in both halves. |mean| may
+    differ. A half below sample floors is a stability fail, not a skip.
+  example_strong: {30m_bp: 4, 60m_bp: 6, 120m_bp: 5}
+  example_weak: {15m_bp: 0, 30m_bp: -1, 47m_bp: 12, 60m_bp: 0}
+  forty_seven_minutes_not_on_grid: true
+
+d1:
+  inspect: preregistered_response_surface_only
+  event_definitions: 4
+  families_executed: [A]
+  families_reported_not_executed: [B, C, D]
+  select_at_most: 2
+  selection: stable_shapes_not_max_mean
+  if_none: KILL_AT_D1
+  freeze_fields:
+    - family
+    - impulse_window_minutes
+    - min_abs_shock_z
+    - direction_sign_rule
+    - shape_class
+    - anchor_horizon_minutes
+    - optional_coherent_horizon_region
+    - primary_estimand
+    - sample_gates
+    - stability_gates
+    - entry_clock
+  significance_threshold: none
+
+d2:
+  open_only_if: D1_froze_at_least_one_candidate
+  no_retune: true
+  no_horizon_change_if_primary_fails: true
+  no_nearby_point_rescue: true
+  evaluate: frozen_candidate_only
+  subject: frozen_anchor_or_region
+  h1_survives_only_if_all:
+    - sample_gates
+    - concentration
+    - equal_day_mean_gt_0_in_frozen_direction
+    - economic_floor_3bp_on_anchor
+    - BH_survivor_q_0_10_across_frozen_confirmatory_hypotheses
+    - if_region_frozen_neighborhood_sign_still_holds
+  if_any_fail: KILL_AT_D2
+  d3_opened: false
+  next_action_even_if_pass: STOP_FOR_INDEPENDENT_REVIEW
+
+d3:
+  open_only_if: explicit_separate_authorization_and_D2_survival
+  no_automatic_launch: true
+  economic_floor_bp: 12
+  bh_q: 0.10
+
+multiplicity:
+  first_wave_discovery_curves: 4
+  horizons_are_descriptors_not_extra_trials: true
+  confirmatory_after_freeze: frozen_hypotheses_only
+  d2_d3_bh_q: 0.10
+  families_B_C_D_not_in_first_wave_count: true
+  no_post_hoc_47m: true
+
+leakage:
+  - completed_bars_only
+  - T_event_plus_2_open_entry
+  - no_T_event_plus_1_open
+  - exact_20_session_scale_no_reachback
+  - listed_universe_beta_panels
+  - causal_eligibility_from_prior_sessions
+  - D1_reader_cannot_load_D2_or_D3
+  - D2_reader_cannot_load_D3
+  - sealed_OOS_inaccessible
+  - no_future_outcome_in_first_event_reservation
+  - contiguous_P0_P1_for_event
+  - horizon_specific_completeness_does_not_impute
+
+reuse_from_v4_v5_v6:
+  - research_calendar_hash_434da4e7_n_days_1255
+  - chronological_D1_D2_D3_dates
+  - listed_common_stock_universe
+  - causal_eligibility_hist
+  - LOO_equal_weight_market_residual
+  - causal_20_session_beta
+  - exact_20_same_clock_shock_z
+  - T_plus_2_open_entry
+  - equal_weight_trading_day_mean
+  - BH_q_0_10
+  - contiguous_target_minutes
+  - window_specific_peer_LOO
+  - readiness_vs_explicit_execute_flags
+  - identity_pins
+
+new_code_required:
+  - multi_horizon_outcome_vector_per_event
+  - response_curve_aggregation
+  - frozen_shape_classifier
+  - neighborhood_and_subperiod_stability
+  - D1_select_stable_region_not_max_cell
+  - family_C_same_clock_volume_z_if_later_approved
+  - family_D_xs_rank_if_later_approved
+  - no_options_path
+
+execution_limitations:
+  - OHLCV_is_not_a_fill
+  - shocked_names_have_wide_spreads
+  - borrow_and_impact_not_in_data
+  - paper_curve_is_not_executable_profit
