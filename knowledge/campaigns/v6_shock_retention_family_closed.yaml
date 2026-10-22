@@ -1,0 +1,109 @@
+# Immutable V6 close record. Does not alter v6_shock_retention_design.yaml.
+# Do not retune. Do not run D3. Do not reopen under a new name.
+family: market_residual_shock_retention
+family_status: CLOSED_NO_EDGE
+campaign: MARKET_RESIDUAL_SHOCK_RETENTION_V1
+science_id: v6_market_residual_shock_retention_v1
+campaign_id: v6_market_residual_shock_retention
+purpose: PERMANENT_CAMPAIGN_CLOSE
+no_rescue: true
+no_retune: true
+no_d3: true
+no_subgroup_rescue: true
+no_h2_h3_promotion: true
+no_cosmetic_rename_reopen: true
+sealed_oos: inaccessible
+
+implementation_sha: 77ddadd703f555eeb42241921472ebaec9acbcaa
+branch: v6-shock-retention-design
+freeze_git: e00367cf6a25adc9f07a3c9aa34feb9141038e51
+
+preserved_artifacts:
+  run_dir: data/derived/discovery/v6/v6-market-residual-shock-retention
+  d1_json: d1.json
+  d2_json: d2.json
+  run_identity_json: run_identity.json
+  do_not_overwrite: true
+
+identities:
+  design:  b6519eb1c9d7ec619bddec1bef1d7b08b0beee6f44ed121bcf578e34b4b4ed85
+  selection: 1c2172b146589a9b961b509b08e439576f159290cd8bad727bd4777b1483fa0b
+  data_manifest: fd208f2a48228d4567100ed3b5e973a1226a4f7a58151ce5c873230cf5eb25e8
+  instruments: 447785f34279d46d1b350dd0af85a34a9caccd9327a6a813bdfc4b4b15fa62b0
+  calendar: 434da4e718c19ddf7389125d2644741f3112ace1c2276478131c449f1f250ea1
+  d1_json_sha256:  d7a7c0996f9602639873475e5fed2a5bdee09bd2cf41b98efaafade0293e8d32
+  d2_json_sha256:  a2e464313e4140c9b59509dd8bd2e84c82791ab30960ed1c887e9fdb38853f5b
+  run_identity_sha256:  c9064ef15c7cf03cfd6ef7555c17ff9a3ed04adcb2a8d47a6141f2f66b0e3407
+
+d1:
+  decision: FREEZE
+  selected_id: W15_W15
+  frozen_cell:
+    id: W15_W15
+    impulse_window_minutes: 15
+    wait_window_minutes: 15
+    min_abs_shock_z: 2.0
+    high_retention_min: 0.50
+    low_retention_max: 0.00
+  h1_equal_day_mean_bp: 0.32441266405161084
+  eligible_ids: [W5_W5, W15_W15]
+  not_eligible:
+    W5_W15: incremental_mean_le_0
+    W15_W5: h1_mean_le_0
+  primary_estimand: equal_weight_trading_day_mean
+  d1_significance_gate: none
+
+d2:
+  decision: KILL_AT_D2
+  evaluated_cell_ids: [W15_W15]
+  d2_opened: true
+  d3_opened: false
+  next_action: STOP_FOR_INDEPENDENT_REVIEW
+  window: {start: '2023-10-18', end: '2024-10-10'}
+  primary_estimand: equal_weight_trading_day_mean
+  h1:
+    events: 44936
+    ticker_days: 44936
+    trading_days: 205
+    tickers: 733
+    top_ticker_share: 0.0036941427808438666
+    equal_day_mean_bp: 0.5349468123509113
+    se_bp: 0.3669356760305081
+    ci_bp: [-0.239697, 1.240337]
+    p_one_sided: 0.07320619593112127
+    bh_survivor: false
+    event_median: 0.0
+    event_win_rate: 0.4901415346270251
+    sample_gates: pass
+    direction_gt_0: true
+    economic_floor_3bp: fail
+  incremental:
+    n_matched_days: 205
+    mean_day_delta_bp: -0.8237408188746719
+    se_bp: 0.9399259342933453
+    ci_bp: [-2.571153, 1.123298]
+    p_one_sided: 0.8090753169409625
+    mean_gt_0: false
+  failure_reasons:
+    - below_d2_floor
+    - bh_not_survivor
+    - incremental_mean
+  h2_h3_cannot_rescue: true
+
+d3_opened: false
+sealed_oos: inaccessible
+outcome: FAILED
+reason: >
+  Primary H1 failed frozen D2 validation. Economic floor failed
+  (0.535 bp < 3 bp). BH confirmation failed (H1 not survivor at q=0.10
+  across H1/H2/H3). Incremental retention mechanism failed directionally
+  (matched day-delta -0.824 bp).
+
+forbidden_next:
+  - run_D3
+  - retune_W_imp_W_wait
+  - retune_z_or_retention
+  - change_outcome_horizon
+  - subgroup_rescue
+  - promote_H2_or_H3
+  - reopen_as_renamed_V6
