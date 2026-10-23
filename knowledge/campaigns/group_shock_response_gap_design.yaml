@@ -2,7 +2,7 @@
 # Do not execute. Do not read future returns. Do not open D2/D3/OOS.
 # Do not modify or reopen V6/V7.
 campaign_id: group_shock_response_gap
-version: stage0_v1_review4
+version: stage0_v1_review5
 science_id: group_shock_response_gap_v1
 status: DESIGN_ONLY
 execution_status: NOT_APPROVED
@@ -91,9 +91,16 @@ GROUP_SHOCK_RESPONSE_GAP_V1:
     current_snapshot_membership: forbidden
     overlapping_hierarchy_not_competing_cells: true
     assignment_rule:
-      primary_level: industry
-      fallback_level: industry_group
+      decided_in: stage0_at_event_not_in_membership_store
+      membership_store_stores_hierarchy_only: true
+      membership_store_must_not_choose_fallback: true
+      primary_level: sic4
+      fallback_level: sic_major_group
+      sic2_is_not_gics_industry_group: true
+      fallback_uses_eligible_members_at_event: true
       fallback_only_if_primary_eligible_members_lt: 8
+      fallback_parent_is_all_eligible_sic2_members: true
+      not_only_the_thin_sic4_names: true
       run_both_then_pick_better: forbidden
       gics_industry_is_primary: true
       gics_industry_group_is_fallback_only: true
@@ -144,14 +151,16 @@ GROUP_SHOCK_RESPONSE_GAP_V1:
       full_panel_ingest: not_authorized
       stage0_feasibility: not_authorized
     membership_record_required_before_execute:
-      - group_id
-      - group_name
+      - instrument_id
+      - ticker
+      - asof_date
+      - sic4
+      - sic2
+      - sic4_id
+      - sic2_id
       - source
       - pit_status
-      - instrument_id
-      - effective_from
-      - effective_to
-      - provenance_hash
+      - semantics
     membership_asof_rule: >
       session_date in [effective_from, effective_to). If source is not PIT,
       the group is NOT_PIT_READY and Stage 0 may not score it as PASS.

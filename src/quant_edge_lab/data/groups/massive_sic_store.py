@@ -6,7 +6,6 @@ Not true PIT. Not GICS. Does not compute feasibility or any future return.
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +17,7 @@ from quant_edge_lab.hashing import sha256_json
 SEMANTICS = "MASSIVE_SIC_EFFECTIVE_DATED_AS_CURRENTLY_MAINTAINED"
 PIT_STATUS = "NOT_TRUE_PIT"
 CLASSIFICATION = "SIC_not_GICS"
-STORE_VERSION = "massive_sic_asof_v1"
-MIN_PRIMARY_MEMBERS = 8
+STORE_VERSION = "massive_sic_asof_v2"
 AUDIT_DATES = (
     "2021-10-01",
     "2022-01-03",
@@ -42,6 +40,7 @@ FORBIDDEN_OUTPUT_KEYS = (
     "response_gap",
     "group_shock_z",
 )
+STORE_MUST_NOT_CHOOSE = ("group_id", "group_level", "assignment")
 
 
 def assert_no_forbidden_keys(payload: Any) -> None:
@@ -73,6 +72,9 @@ def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
         "sic_description": item.get("sic_description"),
         "sic4": sic4,
         "sic2": sic2,
+        "sic4_id": None if sic4 is None else f"sic4:{sic4}",
+        "sic2_id": None if sic2 is None else f"sic2:{sic2}",
+        "sic2_level": None if sic2 is None else "sic_major_group",
         "exchange": item.get("primary_exchange"),
         "type": item.get("type"),
         "active": item.get("active"),
@@ -90,37 +92,16 @@ def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
 
 
 def membership_from_tickers(items: list[dict[str, Any]], asof: str) -> list[dict[str, Any]]:
-    rows = [_row_from_item(item, asof) for item in items]
-    return assign_primary_or_fallback(rows, min_primary_members=MIN_PRIMARY_MEMBERS)
-
-
-def assign_primary_or_fallback(
-    rows: list[dict[str, Any]], *, min_primary_members: int = MIN_PRIMARY_MEMBERS
-) -> list[dict[str, Any]]:
-    counts = Counter(r["sic4"] for r in rows if r.get("sic4"))
-    out: list[dict[str, Any]] = []
-    for raw in rows:
-        row = dict(raw)
-        sic4 = row.get("sic4")
-        sic2 = row.get("sic2")
-        if sic4 and counts[sic4] >= min_primary_members:
-            row["group_id"] = f"sic4:{sic4}"
-            row["group_level"] = "industry"
-            row["assignment"] = "primary"
-        elif sic2:
-            row["group_id"] = f"sic2:{sic2}"
-            row["group_level"] = "industry_group"
-            row["assignment"] = "fallback_insufficient_primary_members"
-        else:
-            row["group_id"] = None
-            row["group_level"] = None
-            row["assignment"] = "unassigned_no_sic"
-        out.append(row)
-    return out
+    """Hierarchy only. Stage 0 chooses sic4 vs sic2 from eligible counts at the event."""
+    return [_row_from_item(item, asof) for item in items]
 
 
 def write_asof_part(root: Path, asof: str, rows: list[dict[str, Any]]) -> Path:
     assert_no_forbidden_keys(rows)
+    for row in rows:
+        for key in STORE_MUST_NOT_CHOOSE:
+            if key in row:
+                raise ValueError(f"membership store must not choose {key}")
     df = pl.DataFrame(rows) if rows else pl.DataFrame()
     dest = Paths(root).derived / "groups" / "massive_sic_asof" / f"date={asof}" / "part.parquet"
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -261,7 +242,8 @@ def audit_source(
                 "overview_sic_field_present": "sic_code" in overview_keys or "sic" in overview_keys,
                 "overview_sic_code": overview.get("sic_code") or overview.get("sic"),
                 "overview_sample_sic_missing_pct": _missing_pct(overview_sample, "sic_code"),
-                "sample_assignments": dict(Counter(r["assignment"] for r in membership)),
+                "n_with_sic4": sum(1 for r in membership if r.get("sic4")),
+                "n_with_sic2": sum(1 for r in membership if r.get("sic2")),
             }
         )
 

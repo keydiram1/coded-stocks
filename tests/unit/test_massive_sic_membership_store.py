@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -6,8 +7,8 @@ from quant_edge_lab.data.groups.massive_sic_store import (
     FORBIDDEN_OUTPUT_KEYS,
     PIT_STATUS,
     SEMANTICS,
+    STORE_MUST_NOT_CHOOSE,
     assert_no_forbidden_keys,
-    assign_primary_or_fallback,
     audit_source,
     membership_from_tickers,
     normalize_sic,
@@ -71,17 +72,49 @@ class FakeClient:
         }
 
 
-def test_normalize_sic_and_fallback_only_when_industry_too_small():
+def stage0_event_group(eligible: list[dict], *, min_n: int = 8) -> dict[str, str | None]:
+    """Documented Stage 0 rule only. Not a runner. Uses eligible counts at the event."""
+    n4 = Counter(r["sic4"] for r in eligible if r.get("sic4"))
+    out: dict[str, str | None] = {}
+    for row in eligible:
+        s4, s2 = row.get("sic4"), row.get("sic2")
+        if s4 and n4[s4] >= min_n:
+            out[str(row["ticker"])] = f"sic4:{s4}"
+        elif s2:
+            out[str(row["ticker"])] = f"sic2:{s2}"
+        else:
+            out[str(row["ticker"])] = None
+    return out
+
+
+def test_store_keeps_sic_hierarchy_and_does_not_choose_fallback():
     assert normalize_sic("3674") == ("3674", "36")
-    fat = [{"sic4": "3674", "sic2": "36", "ticker": f"T{i}"} for i in range(8)]
-    thin = [{"sic4": "3571", "sic2": "35", "ticker": "AAPL"}]
-    out = assign_primary_or_fallback(fat + thin, min_primary_members=8)
-    by = {r["ticker"]: r for r in out}
-    assert by["T0"]["group_id"] == "sic4:3674"
-    assert by["T0"]["assignment"] == "primary"
-    assert by["AAPL"]["group_id"] == "sic2:35"
-    assert by["AAPL"]["assignment"] == "fallback_insufficient_primary_members"
-    assert by["AAPL"]["group_level"] == "industry_group"
+    items = (
+        [{"ticker": f"A{i}", "sic_code": "3674"} for i in range(20)]
+        + [{"ticker": f"B{i}", "sic_code": "3679"} for i in range(3)]
+    )
+    rows = membership_from_tickers(items, "2021-10-01")
+    by = {r["ticker"]: r for r in rows}
+    assert by["A0"]["sic4_id"] == "sic4:3674"
+    assert by["A0"]["sic2_id"] == "sic2:36"
+    assert by["B0"]["sic4_id"] == "sic4:3679"
+    assert by["B0"]["sic2_id"] == "sic2:36"
+    assert by["B0"]["sic2_level"] == "sic_major_group"
+    for row in rows:
+        for key in STORE_MUST_NOT_CHOOSE:
+            assert key not in row
+
+
+def test_stage0_fallback_uses_all_eligible_sic2_members():
+    eligible = (
+        [{"ticker": f"A{i}", "sic4": "3674", "sic2": "36"} for i in range(20)]
+        + [{"ticker": f"B{i}", "sic4": "3679", "sic2": "36"} for i in range(3)]
+    )
+    chosen = stage0_event_group(eligible)
+    assert chosen["A0"] == "sic4:3674"
+    assert chosen["B0"] == "sic2:36"
+    sic2_members = [r["ticker"] for r in eligible if r["sic2"] == "36"]
+    assert len(sic2_members) == 23
 
 
 def test_membership_keeps_all_asof_rows_and_rejects_returns(tmp_path: Path):
@@ -97,6 +130,8 @@ def test_membership_keeps_all_asof_rows_and_rejects_returns(tmp_path: Path):
     assert p1.exists() and p2.exists()
     with pytest.raises(ValueError, match="forbidden"):
         assert_no_forbidden_keys({"future_5m_return": 1})
+    with pytest.raises(ValueError, match="must not choose"):
+        write_asof_part(tmp_path, "2021-10-02", [{**d1[0], "group_id": "sic4:3674"}])
 
 
 def test_audit_writes_manifest_without_feasibility(tmp_path: Path):
@@ -116,3 +151,4 @@ def test_audit_writes_manifest_without_feasibility(tmp_path: Path):
     blob = Path(report["audit_path"]).read_text(encoding="utf-8")
     for key in FORBIDDEN_OUTPUT_KEYS:
         assert key not in blob
+    assert "sample_assignments" not in blob

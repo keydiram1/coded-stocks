@@ -106,6 +106,11 @@ def test_group_sources_are_not_true_pit():
     assert gdef["assignment_rule"]["run_both_then_pick_better"] == "forbidden"
     assert gdef["assignment_rule"]["gics_industry_is_primary"] is True
     assert gdef["assignment_rule"]["fallback_only_if_primary_eligible_members_lt"] == 8
+    assert gdef["assignment_rule"]["membership_store_must_not_choose_fallback"] is True
+    assert gdef["assignment_rule"]["decided_in"] == "stage0_at_event_not_in_membership_store"
+    assert gdef["assignment_rule"]["fallback_level"] == "sic_major_group"
+    assert gdef["assignment_rule"]["sic2_is_not_gics_industry_group"] is True
+    assert gdef["assignment_rule"]["fallback_parent_is_all_eligible_sic2_members"] is True
     assert sel["massive_sic_is_not_pit_gics"] is True
     assert sel["research_question"] == "APPROVED"
     assert sel["stage0_execution"] == "NOT_APPROVED"
