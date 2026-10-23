@@ -50,7 +50,14 @@ class MassiveClient:
             url = self.base_url.rstrip("/") + path
             if params:
                 url = url + "?" + urllib.parse.urlencode(params, doseq=True)
-            req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+            req = urllib.request.Request(
+                url,
+                method="GET",
+                headers={
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+            )
             try:
                 if self.opener:
                     raw = self.opener(req, timeout=self.timeout_s)

@@ -1,0 +1,38 @@
+# GROUP_SHOCK_RESPONSE_GAP_V1 Stage 0 selection. DESIGN_ONLY.
+# Do not execute. Do not reopen V6 or V7. Do not inspect sealed OOS.
+status: DESIGN_ONLY
+execution_status: NOT_APPROVED
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+close_dislocation_family: CLOSED_NO_EDGE
+v6_shock_retention_family: CLOSED_NO_EDGE
+v7_shock_resolution_family: DESIGN_ONLY_NOT_APPROVED
+options_local_rv: DESIGN_ONLY_NOT_READY
+recommended_next_campaign: GROUP_SHOCK_RESPONSE_GAP_V1
+stage: 0
+classification: STAGE0_NOT_APPROVED_PIT_SOURCE_AUDIT_AUTHORIZED
+research_question: APPROVED
+stage0_execution: NOT_APPROVED
+authorized_now: pit_membership_store_and_source_audit_only
+massive_sic_is_not_pit_gics: true
+massive_history_is_not_as_known_on_day: true
+primary_question: feasibility_not_alpha
+new_paid_data: forbidden_at_this_stage
+pit_group_membership: NOT_PIT_READY
+execute_now: false
+no_automatic_launch: true
+
+prior_collision:
+  V6_market_residual_shock_retention: CLOSED_NO_EDGE_KILL_AT_D2
+  V7_market_relative_shock_resolution: DESIGN_ONLY_NOT_APPROVED
+  V5_close_dislocation_family: CLOSED_NO_EDGE
+  V5_options_local_rv: BLOCKED_no_historical_quotes
+  V4_v4r_residual_leader_follower: FAILED_0_RESEARCH_PASS
+
+why_not_v4_peer_graph:
+  - residual_correlation_is_return_clustering_not_an_economic_group
+  - v4_already_failed_as_a_search_not_as_this_feasibility_question
+
+data_required:
+  - existing_stock_minute_OHLCV
+  - pit_economic_group_membership_not_currently_in_repo

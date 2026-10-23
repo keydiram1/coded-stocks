@@ -1,0 +1,459 @@
+# DESIGN_ONLY. Stage 0 feasibility. Not frozen. Not approved.
+# Do not execute. Do not read future returns. Do not open D2/D3/OOS.
+# Do not modify or reopen V6/V7.
+campaign_id: group_shock_response_gap
+version: stage0_v1_review4
+science_id: group_shock_response_gap_v1
+status: DESIGN_ONLY
+execution_status: NOT_APPROVED
+reviewer_approval_required: true
+frozen_before_empirical_execution: false
+sealed_oos: inaccessible
+parent_campaigns: []
+v6_family: CLOSED_NO_EDGE
+v7_family: DESIGN_ONLY_NOT_APPROVED
+close_dislocation_family: CLOSED_NO_EDGE
+v5_options_local_rv: DESIGN_ONLY_NOT_READY
+stage: 0
+stage0_purpose: feasibility_of_independent_group_shocks_and_expected_response_model
+execute_now: false
+no_automatic_launch: true
+note: >
+  Stage 0 asks whether the panel contains enough independent common-group
+  shocks, cross-sectional dispersion, and stable stock-to-group sensitivities
+  to justify a later expected-response / gap-convergence study. It does not
+  test convergence, reversal, continuation, or any return after the event
+  window. Preferred economic groups (GICS, ETF constituents) are not PIT in
+  this repository today. Massive dated tickers expose SIC, not GICS, and
+  effective-dated fields as currently maintained are not as-known-on-day.
+  Do not label that ingest PIT-GICS or true PIT-SIC. Stage 0 remains
+  NOT_APPROVED until these definitions and a membership-store review pass.
+
+primary_research_question_stage0: >
+  For each economic group and frozen horizon, are there enough independent
+  common shocks, enough member dispersion around a leave-one-out group move,
+  and enough stable historical sensitivities to define an expected response?
+
+forbidden_until_stage1_authorization:
+  - future_1m_return
+  - future_5m_return
+  - future_30m_return
+  - next_day_return
+  - convergence
+  - reversal
+  - continuation
+  - response_gap_profitability
+  - p_values_on_future_outcomes
+  - threshold_optimization_for_alpha
+
+GROUP_SHOCK_RESPONSE_GAP_V1:
+  role: stage0_feasibility_family
+  executable_claim: false
+  horizons:
+    - id: H5M
+      length: 5m
+      scientific_scale: separate
+    - id: H30M
+      length: 30m
+      scientific_scale: separate
+    - id: H1D
+      length: 1_trading_day
+      scientific_scale: separate
+  do_not_search_other_horizons: true
+
+  clocks:
+    bar_label: minute_bar_start_ET
+    interval: "[t, t+1m)"
+    signal_available_at: immediately_after_window_end_close
+    reserve_only_after_completed_window: true
+    unfinished_window_cannot_qualify: true
+    H5M_window: "close(t)/close(t_minus_5m)-1"
+    H30M_window: "close(t)/close(t_minus_30m)-1"
+    H1D_window: "close(15:59)/open(09:30)-1"
+    H5M_grid: every_5m_RTH_from_09:35_through_15:55
+    H30M_grid: every_30m_RTH_from_10:00_through_15:30
+    H1D_grid: one_candidate_per_group_per_FULL_RTH_session
+    reservation_time: signal_available_time
+    entry_or_forward_clock: not_in_stage0
+
+  time_of_day:
+    H5M: normalize_shock_scale_and_beta_by_group_x_horizon_x_clock_bucket
+    H30M: normalize_shock_scale_and_beta_by_group_x_horizon_x_clock_bucket
+    H1D: no_intraday_tod_bucket
+    clock_bucket: window_end_minute_ET
+    no_pooling_across_clocks: true
+
+  group_definitions:
+    freeze_before_outcomes: true
+    do_not_cluster_on_returns: true
+    do_not_optimize_membership_from_stage0: true
+    residual_correlation_peer_graph: forbidden_as_economic_group
+    current_snapshot_membership: forbidden
+    overlapping_hierarchy_not_competing_cells: true
+    assignment_rule:
+      primary_level: industry
+      fallback_level: industry_group
+      fallback_only_if_primary_eligible_members_lt: 8
+      run_both_then_pick_better: forbidden
+      gics_industry_is_primary: true
+      gics_industry_group_is_fallback_only: true
+      sic_analogue_primary: sic4
+      sic_analogue_fallback: sic2
+    hierarchy:
+      - rank: 1
+        id: GICS_INDUSTRY
+        source: official_GICS_industry
+        pit_status: NOT_PIT_READY
+        in_repo: false
+        reason: no_GICS_table_in_instruments_or_data_root
+      - rank: 2
+        id: GICS_INDUSTRY_GROUP
+        source: official_GICS_industry_group
+        pit_status: NOT_PIT_READY
+        in_repo: false
+        reason: no_GICS_table_in_instruments_or_data_root
+      - rank: 3
+        id: SECTOR_ETF_CONSTITUENTS
+        source: historical_ETF_holdings_without_lookahead
+        pit_status: NOT_PIT_READY
+        in_repo: false
+        reason: SIP_minutes_may_contain_ETF_bars_but_no_constituent_history
+      - rank: 4
+        id: MANUAL_ECONOMIC_PEERS
+        source: documented_economic_reason_only
+        pit_status: NOT_USED_IN_STAGE0
+        in_repo: false
+    source_audit_authorized:
+      id: MASSIVE_DATED_TICKER_SIC
+      endpoint: /v3/reference/tickers
+      asof_param: date
+      classification_system: SIC_not_GICS
+      ticker_overview_has_sic_code: true
+      required_change: keep_all_asof_rows_do_not_unique_keep_last
+      retain_fields_if_present: [sic_code, sic_description]
+      gics_not_assumed: true
+      silent_swap_sic_for_gics: forbidden
+      call_it_pit_gics: forbidden
+      call_it_true_pit_sic: forbidden
+      massive_history_semantics: effective_dated_as_currently_maintained
+      not_as_known_on_that_day: true
+      ticker_overview_sec_fields_may_lag_period_of_report: true
+      current_code: prepare_pit_reference_drops_industry_and_collapses_to_last_ticker
+      still_not_pit_ready: true
+      authorized_now: source_audit_and_sample_store_only
+      full_panel_ingest: not_authorized
+      stage0_feasibility: not_authorized
+    membership_record_required_before_execute:
+      - group_id
+      - group_name
+      - source
+      - pit_status
+      - instrument_id
+      - effective_from
+      - effective_to
+      - provenance_hash
+    membership_asof_rule: >
+      session_date in [effective_from, effective_to). If source is not PIT,
+      the group is NOT_PIT_READY and Stage 0 may not score it as PASS.
+
+  eligibility:
+    inherit_v5: true
+    listed_common_stock_nasdaq_nyse_nyse_american: true
+    prev_close_ge_1: true
+    median_20d_rth_dollar_volume_ge_1e6: true
+    both_window_endpoint_prices_required: true
+    missing_dropped_not_imputed: true
+    etf_not_in_event_universe: true
+
+  group_move:
+    primary_id: robust_loo_median
+    primary: median_simple_return_of_causally_eligible_group_members_excluding_target
+    formula: "group_move_LOO(i)=median of eligible member returns excluding i"
+    min_loo_members: 7
+    no_arithmetic_mean_as_primary: true
+    no_self_contamination: true
+    shock_existence_stat: median_simple_return_of_all_causally_eligible_group_members
+    shock_existence_min_members: 8
+    robustness_diagnostic_frozen:
+      id: winsorized_equal_weight_mean_loo
+      winsor: [0.05, 0.95]
+      may_replace_primary_after_seeing_results: false
+    return_type: simple_close_to_close_in_window
+
+  group_shock:
+    abnormality_relative_to: [same_group, same_horizon, same_clock_bucket_if_intraday]
+    no_raw_fixed_percent: true
+    centered: true
+    primary_stat: group_shock_z
+    formula: "(group_move_existence - historical_same_clock_median) / (1.4826 * MAD)"
+    uncentered_group_move_over_MAD: forbidden
+    historical_location:
+      estimator: median_of_prior_group_existence_moves
+      same_clock_bucket: true
+    historical_scale:
+      estimator: 1.4826 * MAD_of_prior_group_existence_moves_about_that_median
+      lookback: exact_60_prior_completed_same_clock_observations
+      prior_data_only: true
+      current_event_excluded_from_location_and_scale: true
+      current_event_excluded_from_denominator: true
+      no_future_reachback: true
+      no_imputation: true
+      missing_any_of_60: z_unavailable
+    severity_ladder_feasibility_only:
+      - 2.0
+      - 2.5
+      - 3.0
+    primary_severity_for_pass_kill: 2.5
+    do_not_select_threshold_from_future_returns: true
+    do_not_optimize_for_alpha: true
+
+  independence:
+    event_unit: economic_group_x_event_end_time
+    do_not_count_each_member_as_independent_shock: true
+    nested_unit: stock_observation_inside_independent_group_shock
+    shared_cooldown_across_severity_ladder: forbidden
+    reason_shared_cooldown_forbidden: a_2_1_event_must_not_hide_a_later_3_5_event
+    reservation: independent_per_abs_z_threshold
+    pass_kill_uses_only_the_2_5_stream: true
+    streams:
+      - abs_z: 2.0
+        role: descriptive_sample_size_only
+        own_reservation_and_cooldown: true
+      - abs_z: 2.5
+        role: primary_pass_kill
+        own_reservation_and_cooldown: true
+      - abs_z: 3.0
+        role: descriptive_sample_size_only
+        own_reservation_and_cooldown: true
+    reserve_first_causal_qualifying_shock_on_that_stream: true
+    qualify_min_abs_z_on_stream: stream_threshold
+    cooldown:
+      H5M: 30m_after_event_end_same_group_same_stream
+      H30M: 90m_after_event_end_same_group_same_stream
+      H1D: 1_trading_session_after_event_session_same_group_same_stream
+    overlapping_windows_not_double_counted_within_stream: true
+    report_both:
+      - n_independent_group_shocks_per_stream
+      - n_stock_level_nested_observations_per_stream
+
+  expected_response_model_stage0:
+    formula: "stock_return ≈ alpha_i + beta_i * group_move_LOO(i)"
+    estimator: OLS_with_intercept
+    sample: last_60_prior_completed_same_group_horizon_clock_observations
+    current_event_excluded: true
+    never_fill_beta_1: true
+    insufficient_history: unusable_not_forced
+    group_move_on_right_hand_side: leave_one_out_of_target
+    not_a_profitability_model: true
+
+  residual_scale:
+    id: prior_residual_scale_i
+    formula: "1.4826 * MAD of the exact 60 prior same-clock residuals"
+    residual_at_s: "r_i(s) - (alpha_i(s) + beta_i(s) * group_move_LOO(i,s))"
+    historical_windows_use_rolling_origin: true
+    do_not_apply_event_time_model_backward: true
+    at_each_historical_window_s: alpha_beta_scale_estimated_from_completed_data_strictly_before_s
+    same_clock_bucket: true
+    prior_only: true
+    current_event_excluded: true
+    missing_any_of_60: scale_unavailable_stock_unusable_for_standardized_dispersion
+    do_not_use_raw_return_vol_as_residual_scale: true
+    not_a_source_audit_blocker: true
+
+  sensitivity_stability:
+    rolling_windows: 3_nonoverlapping_blocks_of_20_prior_same_clock_obs
+    metrics:
+      - beta_ols
+      - beta_se
+      - abs_tstat
+      - relative_rolling_beta_iqr
+      - sign_change_across_blocks
+      - ols_r_squared
+      - residual_scale
+      - n_usable_history
+    relative_iqr_formula: "rolling_beta_iqr / max(abs(median_rolling_beta), 0.05)"
+    stable_iff:
+      n_pairs_ge: 60
+      abs_tstat_ge: 2.0
+      ols_r_squared_ge: 0.10
+      relative_rolling_beta_iqr_le: 0.50
+      sign_change_kills_if_abs_median_beta_ge: 0.15
+    absolute_abs_beta_ge_0_20: not_a_kill_gate
+    absolute_rolling_iqr_le_0_50: not_a_kill_gate
+    small_stable_beta_is_usable: true
+    unstable: mark_unusable
+    size_vol_liquidity_as_model_inputs: not_in_stage0
+
+  dispersion:
+    computed_on: members_with_stable_sensitivity_inside_independent_shock
+    residual_i: "r_i - (alpha_i + beta_i * group_move_LOO(i))"
+    standardized_residual_i: "residual_i / prior_residual_scale_i"
+    shock_dispersion: mad_of_standardized_residuals_at_event
+    historical_same_clock_dispersion: >
+      median of the same MAD-of-standardized-residuals statistic on the
+      exact 60 prior completed same-clock windows, current event excluded,
+      quiet windows kept so the baseline is ordinary noise not a shock-only sample
+    historical_baseline_rolling_origin: true
+    do_not_apply_event_time_model_backward: true
+    not_a_source_audit_blocker: true
+    primary_metric: excess_dispersion
+    excess_dispersion: "shock_dispersion / historical_same_clock_dispersion"
+    purpose: abnormal_dispersion_during_group_shock_not_ordinary_tracking_noise
+    absolute_mad_floor_is_not_the_phenomenon: true
+    bp_metrics: descriptive_only
+    metrics:
+      - excess_dispersion
+      - mad_of_standardized_residuals
+      - historical_same_clock_dispersion
+      - fraction_materially_above_or_below_expected
+      - effective_member_count
+      - median_absolute_deviation_of_residuals_bp_descriptive
+    material_threshold_stage0: "abs(standardized_residual_i) >= 1.0"
+    do_not_define_alpha_threshold: true
+    do_not_pass_kill_on_raw_bp: true
+
+  stage0_outputs:
+    unit: group_x_horizon_x_severity
+    columns:
+      - group_id
+      - group_name
+      - group_definition_source
+      - pit_status
+      - horizon
+      - shock_threshold
+      - n_independent_shocks
+      - median_members_per_shock
+      - n_stock_level_nested_observations
+      - median_excess_dispersion
+      - median_mad_of_standardized_residuals
+      - median_response_dispersion_mad_bp_descriptive
+      - dispersion_iqr_distribution
+      - pct_stocks_stable_sensitivity
+      - median_relative_beta_iqr
+      - usable_historical_coverage
+      - concentration_diagnostics
+      - verdict
+      - failure_reasons
+    aggregates:
+      - total_independent_shocks
+      - shocks_by_horizon
+      - shocks_by_group
+      - group_size_distribution
+      - response_dispersion_distribution
+      - beta_stability_distribution
+      - n_groups_scientifically_usable
+    verdicts: [PASS, KILL, NOT_PIT_READY]
+    stop_before_any_future_return: true
+
+  proposed_pass_kill_gates:
+    frozen_before_execution: true
+    must_not_retune_after_seeing_results: true
+    evaluated_at_severity: 2.5
+    uniform_min_40_shocks_every_horizon: forbidden
+    min_independent_group_shocks:
+      H5M: 40
+      H30M: 25
+      H1D: 12
+    h1d_rationale: >
+      About 1200 usable sessions. Under a near-normal |z|>=2.5 rate the
+      expected count per group is about 15, not 40. The 12 floor is a
+      per-group rarity gate. The 40 count is an across-group 1D aggregate.
+    min_total_independent_h1d_shocks_across_groups: 40
+    min_groups_with_h1d_shocks_ge_8: 5
+    min_median_eligible_members_per_shock: 8
+    min_median_effective_stable_members_per_shock: 6
+    min_stock_level_nested_observations:
+      H5M: 250
+      H30M: 150
+      H1D: 80
+    min_fraction_members_stable_sensitivity: 0.40
+    min_usable_history_same_clock_obs: 60
+    min_median_excess_dispersion: 1.30
+    min_median_mad_of_standardized_residuals: 0.35
+    mad_floor_role: secondary_not_the_phenomenon
+    residual_mad_bp_descriptive_only:
+      H5M: 10
+      H30M: 20
+      H1D: 40
+    max_share_independent_shocks_any_calendar_quarter: 0.40
+    max_share_nested_obs_any_single_name: 0.10
+    not_pit: NOT_PIT_READY_not_PASS
+    purpose: is_the_family_scientifically_testable_not_is_there_a_profitable_rule
+    family_pass_kill:
+      cherry_pick_best_group_after_seeing_results: forbidden
+      stage1_includes: all_groups_that_pass_that_horizon
+      min_groups_pass_per_horizon:
+        H5M: 8
+        H30M: 6
+        H1D: 5
+      horizons_are_independent_scales: true
+      if_only_one_horizon_family_passes: stage1_may_use_only_that_horizon_with_all_its_passing_groups
+      failed_horizons: not_eligible_for_stage1_and_not_rescued_by_other_horizons
+      if_zero_horizons_meet_family_gate: FAMILY_KILL_AT_STAGE0
+
+  splits_stage0:
+    uses_research_calendar_hash: 434da4e718c19ddf7389125d2644741f3112ace1c2276478131c449f1f250ea1
+    n_days: 1255
+    panel: 2021-10-01_to_2026-10-01
+    d1_d2_d3_not_opened: true
+    sealed_oos: inaccessible
+    stage0_may_use: all_research_calendar_sessions_for_event_characterization_only
+    stage0_may_not_use: any_return_after_event_window_end
+
+  computational_cost_estimate:
+    grid_slots_per_day: {H5M: 77, H30M: 12, H1D: 1}
+    assumed_groups_if_gics_industry_ready: 40_to_80
+    relative_to_v6_d1_minute_walk: 0.2_to_0.6x_if_on_frozen_grid
+    blocked_until_pit_membership: true
+    new_paid_data: not_authorized_by_this_design
+
+  reuse_from_v4_v5_v6_v7:
+    - v5_session_rth_and_full_rth_day_classifier
+    - v5_causal_eligibility_listed_vs_eligible
+    - v5_v6_exact_prior_calendar_sessions_no_reachback
+    - v6_simple_return_and_window_peer_price_intersection
+    - v4_loo_market_returns_kernel_with_unit_weights_replaced_by_median
+    - v4r_ols_beta_with_intercept_never_fill_1
+    - v6_shock_z_same_clock_historical_scale_pattern
+    - v7_design_only_yaml_plus_unit_test_pattern
+    - calendar_hash_434da4e7
+  do_not_reuse_as_groups:
+    - v4_residual_correlation_peer_graph
+    - v6_marketwide_eligible_loo_as_economic_group
+  do_not_reopen:
+    - V6_MARKET_RESIDUAL_SHOCK_RETENTION
+    - V7_MARKET_RELATIVE_SHOCK_RESOLUTION
+    - V5_CLOSE_DISLOCATION
+
+  new_code_required_after_review:
+    - group_median_loo_move
+    - group_x_horizon_x_tod_centered_z
+    - independent_per_threshold_shock_cooldown
+    - rolling_group_beta_stability
+    - stage0_feasibility_table_writer
+    - no_future_return_columns_assert
+  empirical_runner_exists: false
+  pit_store_package: src/quant_edge_lab/data/groups
+  discovery_package: src/quant_edge_lab/discovery/group_shock_response_gap
+  discovery_package_must_not_exist_until_stage0_authorized: true
+  pit_source_audit_authorized: true
+
+  leakage:
+    - group_return_excludes_target
+    - beta_prior_completed_only
+    - vol_prior_completed_only
+    - shock_scale_prior_only
+    - membership_pit_or_not_pit_ready
+    - unfinished_window_cannot_qualify
+    - no_information_after_event_window_end
+    - no_future_returns_in_stage0_outputs
+
+  stage1_not_yet:
+    expected_return: "f(group_shock, historical_sensitivity, vol, liquidity, market_state)"
+    response_gap: "actual_return - expected_return"
+    later_question: does_unusual_gap_predict_subsequent_relative_convergence
+    contemporaneous_multi_group_firing_is_not_independent: true
+    market_wide_shock_may_fire_many_groups_same_minute: true
+    later_require_time_or_market_event_clustering: true
+    not_a_stage0_blocker: true
+    authorized: false

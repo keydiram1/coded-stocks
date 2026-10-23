@@ -178,6 +178,14 @@ def massive_prepare_reference() -> None:
     console.print_json(data=prepare_pit_reference(Path.cwd()))
 
 
+@massive_app.command("audit-group-membership")
+def massive_audit_group_membership() -> None:
+    """SIC source audit + sample as-of store. Not Stage 0. No future returns."""
+    from quant_edge_lab.data.groups.massive_sic_store import run_source_audit
+
+    console.print_json(data=run_source_audit(Path.cwd()))
+
+
 @massive_app.command("validate-flat")
 def massive_validate_flat() -> None:
     from quant_edge_lab.data.massive.quality import certify_massive_flat
