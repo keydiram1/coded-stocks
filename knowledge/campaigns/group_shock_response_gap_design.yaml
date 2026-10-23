@@ -2,7 +2,7 @@
 # Do not execute. Do not read future returns. Do not open D2/D3/OOS.
 # Do not modify or reopen V6/V7.
 campaign_id: group_shock_response_gap
-version: stage0_v1_review5
+version: stage0_v1_review6
 science_id: group_shock_response_gap_v1
 status: DESIGN_ONLY
 execution_status: NOT_APPROVED
@@ -152,15 +152,19 @@ GROUP_SHOCK_RESPONSE_GAP_V1:
       stage0_feasibility: not_authorized
     membership_record_required_before_execute:
       - instrument_id
+      - identity_scheme
       - ticker
       - asof_date
       - sic4
       - sic2
       - sic4_id
       - sic2_id
+      - sic_status
       - source
       - pit_status
       - semantics
+    instrument_id_scheme: figi_then_cik_then_ticker
+    ticker_is_asof_attribute: true
     membership_asof_rule: >
       session_date in [effective_from, effective_to). If source is not PIT,
       the group is NOT_PIT_READY and Stage 0 may not score it as PASS.

@@ -6,18 +6,20 @@ Not true PIT. Not GICS. Does not compute feasibility or any future return.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 
 from quant_edge_lab.config import Paths
+from quant_edge_lab.data.massive.normalize import instrument_id_for
 from quant_edge_lab.hashing import sha256_json
 
 SEMANTICS = "MASSIVE_SIC_EFFECTIVE_DATED_AS_CURRENTLY_MAINTAINED"
 PIT_STATUS = "NOT_TRUE_PIT"
 CLASSIFICATION = "SIC_not_GICS"
-STORE_VERSION = "massive_sic_asof_v2"
+STORE_VERSION = "massive_sic_asof_v3"
 AUDIT_DATES = (
     "2021-10-01",
     "2022-01-03",
@@ -50,24 +52,39 @@ def assert_no_forbidden_keys(payload: Any) -> None:
             raise ValueError(f"forbidden Stage 0/1 key in membership output: {key}")
 
 
-def normalize_sic(raw: Any) -> tuple[str | None, str | None]:
-    if raw is None:
-        return None, None
+def normalize_sic(raw: Any) -> tuple[str | None, str | None, str]:
+    """Keep 1–4 digit SIC codes. Do not silently crop 5+ digit values."""
+    if raw is None or str(raw).strip() == "":
+        return None, None, "missing"
     digits = "".join(ch for ch in str(raw).strip() if ch.isdigit())
     if not digits:
-        return None, None
-    sic4 = digits.zfill(4)[-4:]
-    return sic4, sic4[:2]
+        return None, None, "rejected_no_digits"
+    if len(digits) > 4:
+        return None, None, "rejected_gt_4_digits"
+    sic4 = digits.zfill(4)
+    return sic4, sic4[:2], "ok"
 
 
 def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
     ticker = str(item.get("ticker") or "")
+    figi = item.get("composite_figi")
+    cik = None if item.get("cik") is None else str(item.get("cik"))
+    iid = instrument_id_for(ticker, figi, cik) if ticker or figi or cik else None
+    if figi:
+        identity_scheme = "figi"
+    elif cik:
+        identity_scheme = "cik"
+    elif ticker:
+        identity_scheme = "ticker"
+    else:
+        identity_scheme = None
     sic_raw = item.get("sic_code") if item.get("sic_code") is not None else item.get("sic")
-    sic4, sic2 = normalize_sic(sic_raw)
+    sic4, sic2, sic_status = normalize_sic(sic_raw)
     return {
         "asof_date": asof,
         "ticker": ticker,
-        "instrument_id": f"ticker:{ticker}" if ticker else None,
+        "instrument_id": iid,
+        "identity_scheme": identity_scheme,
         "sic_code": None if sic_raw is None else str(sic_raw),
         "sic_description": item.get("sic_description"),
         "sic4": sic4,
@@ -75,6 +92,7 @@ def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
         "sic4_id": None if sic4 is None else f"sic4:{sic4}",
         "sic2_id": None if sic2 is None else f"sic2:{sic2}",
         "sic2_level": None if sic2 is None else "sic_major_group",
+        "sic_status": sic_status,
         "exchange": item.get("primary_exchange"),
         "type": item.get("type"),
         "active": item.get("active"),
@@ -244,6 +262,12 @@ def audit_source(
                 "overview_sample_sic_missing_pct": _missing_pct(overview_sample, "sic_code"),
                 "n_with_sic4": sum(1 for r in membership if r.get("sic4")),
                 "n_with_sic2": sum(1 for r in membership if r.get("sic2")),
+                "n_sic_rejected": sum(
+                    1 for r in membership if str(r.get("sic_status", "")).startswith("rejected")
+                ),
+                "identity_scheme_counts": dict(
+                    Counter(r.get("identity_scheme") for r in membership)
+                ),
             }
         )
 

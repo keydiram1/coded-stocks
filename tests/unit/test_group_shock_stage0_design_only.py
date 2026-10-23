@@ -111,6 +111,8 @@ def test_group_sources_are_not_true_pit():
     assert gdef["assignment_rule"]["fallback_level"] == "sic_major_group"
     assert gdef["assignment_rule"]["sic2_is_not_gics_industry_group"] is True
     assert gdef["assignment_rule"]["fallback_parent_is_all_eligible_sic2_members"] is True
+    assert gdef["instrument_id_scheme"] == "figi_then_cik_then_ticker"
+    assert gdef["ticker_is_asof_attribute"] is True
     assert sel["massive_sic_is_not_pit_gics"] is True
     assert sel["research_question"] == "APPROVED"
     assert sel["stage0_execution"] == "NOT_APPROVED"

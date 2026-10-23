@@ -88,7 +88,9 @@ def stage0_event_group(eligible: list[dict], *, min_n: int = 8) -> dict[str, str
 
 
 def test_store_keeps_sic_hierarchy_and_does_not_choose_fallback():
-    assert normalize_sic("3674") == ("3674", "36")
+    assert normalize_sic("3674") == ("3674", "36", "ok")
+    assert normalize_sic("12345") == (None, None, "rejected_gt_4_digits")
+    assert normalize_sic("36") == ("0036", "00", "ok")
     items = (
         [{"ticker": f"A{i}", "sic_code": "3674"} for i in range(20)]
         + [{"ticker": f"B{i}", "sic_code": "3679"} for i in range(3)]
@@ -103,6 +105,14 @@ def test_store_keeps_sic_hierarchy_and_does_not_choose_fallback():
     for row in rows:
         for key in STORE_MUST_NOT_CHOOSE:
             assert key not in row
+        assert row["identity_scheme"] == "ticker"
+    figi_row = membership_from_tickers(
+        [{"ticker": "FB", "sic_code": "7370", "composite_figi": "BBG000", "cik": "9"}],
+        "2021-10-01",
+    )[0]
+    assert figi_row["instrument_id"] == "figi:BBG000"
+    assert figi_row["ticker"] == "FB"
+    assert figi_row["identity_scheme"] == "figi"
 
 
 def test_stage0_fallback_uses_all_eligible_sic2_members():
