@@ -2,7 +2,7 @@
 # Do not execute. Do not read future returns. Do not open D2/D3/OOS.
 # Do not modify or reopen V6/V7.
 campaign_id: group_shock_response_gap
-version: stage0_v1_review6
+version: stage0_v1_review7
 science_id: group_shock_response_gap_v1
 status: DESIGN_ONLY
 execution_status: NOT_APPROVED
@@ -153,6 +153,9 @@ GROUP_SHOCK_RESPONSE_GAP_V1:
     membership_record_required_before_execute:
       - instrument_id
       - identity_scheme
+      - share_class_figi
+      - composite_figi
+      - cik
       - ticker
       - asof_date
       - sic4
@@ -163,7 +166,8 @@ GROUP_SHOCK_RESPONSE_GAP_V1:
       - source
       - pit_status
       - semantics
-    instrument_id_scheme: figi_then_cik_then_ticker
+    instrument_id_scheme: share_class_figi_then_composite_figi_then_cik_and_ticker_then_ticker
+    cik_never_used_alone: true
     ticker_is_asof_attribute: true
     membership_asof_rule: >
       session_date in [effective_from, effective_to). If source is not PIT,

@@ -13,13 +13,12 @@ from typing import Any
 import polars as pl
 
 from quant_edge_lab.config import Paths
-from quant_edge_lab.data.massive.normalize import instrument_id_for
 from quant_edge_lab.hashing import sha256_json
 
 SEMANTICS = "MASSIVE_SIC_EFFECTIVE_DATED_AS_CURRENTLY_MAINTAINED"
 PIT_STATUS = "NOT_TRUE_PIT"
 CLASSIFICATION = "SIC_not_GICS"
-STORE_VERSION = "massive_sic_asof_v3"
+STORE_VERSION = "massive_sic_asof_v4"
 AUDIT_DATES = (
     "2021-10-01",
     "2022-01-03",
@@ -65,19 +64,33 @@ def normalize_sic(raw: Any) -> tuple[str | None, str | None, str]:
     return sic4, sic4[:2], "ok"
 
 
+def sic_raw_digit_len(raw: Any) -> int | None:
+    if raw is None or str(raw).strip() == "":
+        return None
+    digits = "".join(ch for ch in str(raw).strip() if ch.isdigit())
+    return len(digits)
+
+
+def membership_identity(item: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Security identity. CIK is issuer-level and is never used alone."""
+    ticker = str(item.get("ticker") or "")
+    share_class = item.get("share_class_figi")
+    composite = item.get("composite_figi")
+    cik = None if item.get("cik") is None else str(item.get("cik"))
+    if not _blank(share_class):
+        return f"share_class_figi:{share_class}", "share_class_figi"
+    if not _blank(composite):
+        return f"composite_figi:{composite}", "composite_figi"
+    if not _blank(cik) and ticker:
+        return f"cik:{cik}|ticker:{ticker}", "cik_ticker"
+    if ticker:
+        return f"ticker:{ticker}", "ticker"
+    return None, None
+
+
 def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
     ticker = str(item.get("ticker") or "")
-    figi = item.get("composite_figi")
-    cik = None if item.get("cik") is None else str(item.get("cik"))
-    iid = instrument_id_for(ticker, figi, cik) if ticker or figi or cik else None
-    if figi:
-        identity_scheme = "figi"
-    elif cik:
-        identity_scheme = "cik"
-    elif ticker:
-        identity_scheme = "ticker"
-    else:
-        identity_scheme = None
+    iid, identity_scheme = membership_identity(item)
     sic_raw = item.get("sic_code") if item.get("sic_code") is not None else item.get("sic")
     sic4, sic2, sic_status = normalize_sic(sic_raw)
     return {
@@ -93,11 +106,13 @@ def _row_from_item(item: dict[str, Any], asof: str) -> dict[str, Any]:
         "sic2_id": None if sic2 is None else f"sic2:{sic2}",
         "sic2_level": None if sic2 is None else "sic_major_group",
         "sic_status": sic_status,
+        "sic_raw_digit_len": sic_raw_digit_len(sic_raw),
         "exchange": item.get("primary_exchange"),
         "type": item.get("type"),
         "active": item.get("active"),
         "cik": None if item.get("cik") is None else str(item.get("cik")),
         "composite_figi": item.get("composite_figi"),
+        "share_class_figi": item.get("share_class_figi"),
         "list_date": item.get("list_date"),
         "delisted_utc": item.get("delisted_utc") or item.get("delist_date"),
         "last_updated_utc": item.get("last_updated_utc"),
@@ -174,6 +189,14 @@ def _overview(client: Any, ticker: str, asof: str) -> dict[str, Any]:
     payload = client.get(f"/v3/reference/tickers/{ticker}", {"date": asof})
     body = payload.get("results") or payload
     return body if isinstance(body, dict) else {}
+
+
+def _merge_digit_lens(date_reports: list[dict[str, Any]]) -> Counter:
+    out: Counter[int] = Counter()
+    for day in date_reports:
+        for key, val in day["sic_raw_digit_len_distribution"].items():
+            out[int(key)] += int(val)
+    return out
 
 
 def _last_updated_after_asof(item: dict[str, Any], asof: str) -> bool:
@@ -268,6 +291,14 @@ def audit_source(
                 "identity_scheme_counts": dict(
                     Counter(r.get("identity_scheme") for r in membership)
                 ),
+                "sic_raw_digit_len_distribution": dict(
+                    Counter(
+                        n
+                        for n in (r.get("sic_raw_digit_len") for r in membership)
+                        if n is not None
+                    )
+                ),
+                "missing_share_class_figi_pct": _missing_pct(list_rows, "share_class_figi"),
             }
         )
 
@@ -312,11 +343,17 @@ def audit_source(
                 d["overview_sic_field_present"] for d in date_reports
             ),
             "missing_sic_pct_by_asof": {d["asof"]: d["missing_sic_pct"] for d in date_reports},
+            "sic_raw_digit_len_distribution": dict(
+                _merge_digit_lens(date_reports)
+            ),
         },
         "missing_identifiers": {
             "missing_sic_pct_by_asof": {d["asof"]: d["missing_sic_pct"] for d in date_reports},
             "missing_cik_pct_by_asof": {d["asof"]: d["missing_cik_pct"] for d in date_reports},
             "missing_figi_pct_by_asof": {d["asof"]: d["missing_figi_pct"] for d in date_reports},
+            "missing_share_class_figi_pct_by_asof": {
+                d["asof"]: d["missing_share_class_figi_pct"] for d in date_reports
+            },
         },
         "ticker_changes_delistings": {
             "first_asof": first,

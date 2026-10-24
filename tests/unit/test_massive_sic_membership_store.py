@@ -106,13 +106,40 @@ def test_store_keeps_sic_hierarchy_and_does_not_choose_fallback():
         for key in STORE_MUST_NOT_CHOOSE:
             assert key not in row
         assert row["identity_scheme"] == "ticker"
-    figi_row = membership_from_tickers(
-        [{"ticker": "FB", "sic_code": "7370", "composite_figi": "BBG000", "cik": "9"}],
+    goog = membership_from_tickers(
+        [
+            {
+                "ticker": "GOOG",
+                "cik": "1652044",
+                "share_class_figi": "BBG001",
+                "composite_figi": "BBGCOMP",
+                "sic_code": "7370",
+            },
+            {
+                "ticker": "GOOGL",
+                "cik": "1652044",
+                "share_class_figi": "BBG002",
+                "composite_figi": "BBGCOMP",
+                "sic_code": "7370",
+            },
+            {
+                "ticker": "FB",
+                "cik": "9",
+                "composite_figi": "BBG000",
+                "sic_code": "7370",
+            },
+            {"ticker": "BRK.A", "cik": "1067983", "sic_code": "6331"},
+            {"ticker": "BRK.B", "cik": "1067983", "sic_code": "6331"},
+        ],
         "2021-10-01",
-    )[0]
-    assert figi_row["instrument_id"] == "figi:BBG000"
-    assert figi_row["ticker"] == "FB"
-    assert figi_row["identity_scheme"] == "figi"
+    )
+    by = {r["ticker"]: r for r in goog}
+    assert by["GOOG"]["instrument_id"] != by["GOOGL"]["instrument_id"]
+    assert by["GOOG"]["identity_scheme"] == "share_class_figi"
+    assert by["FB"]["instrument_id"] == "composite_figi:BBG000"
+    assert by["BRK.A"]["instrument_id"] == "cik:1067983|ticker:BRK.A"
+    assert by["BRK.B"]["instrument_id"] == "cik:1067983|ticker:BRK.B"
+    assert by["BRK.A"]["identity_scheme"] == "cik_ticker"
 
 
 def test_stage0_fallback_uses_all_eligible_sic2_members():
@@ -157,6 +184,7 @@ def test_audit_writes_manifest_without_feasibility(tmp_path: Path):
     assert "n_disappeared" in report["ticker_changes_delistings"]
     assert "n_sic_changed" in report["sic_code_changes"]
     assert "identical_refetch_of_first_asof" in report["revision_behaviour"]
+    assert "sic_raw_digit_len_distribution" in report["sic_coverage"]
     assert Path(report["audit_path"]).exists()
     blob = Path(report["audit_path"]).read_text(encoding="utf-8")
     for key in FORBIDDEN_OUTPUT_KEYS:
